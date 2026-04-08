@@ -13,7 +13,7 @@ export default function Settings() {
   const [refreshInterval, setRefreshInterval] = useState(() => localStorage.getItem('monitor_interval') || '5');
   const [saved, setSaved] = useState(false);
 
-  const [tgUsername, setTgUsername] = useState('BSF_monitor_Bot');
+  const [tgUsername, setTgUsername] = useState('vrrser');
   const [tgChatId, setTgChatId] = useState<number | null>(null);
   const [tgStatus, setTgStatus] = useState<'idle' | 'sending' | 'ok' | 'error'>('idle');
   const [tgError, setTgError] = useState('');
