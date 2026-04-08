@@ -1,11 +1,13 @@
 """
-Управление ключевыми словами и настройками уведомлений. v3
+Управление ключевыми словами и настройками уведомлений. v4
 action=keywords_list — список ключевых слов
 action=keywords_add — добавить слово (body: {word})
 action=keywords_toggle — переключить (body: {id, active})
 action=keywords_delete — удалить (body: {id})
 action=notify_get — настройки уведомлений
 action=notify_save — сохранить (body: {tg_chat_id, tg_enabled, min_mentions})
+action=vk_token_save — сохранить токен VK (body: {token})
+action=vk_token_get — получить статус токена VK (есть/нет)
 """
 
 import os
@@ -104,6 +106,29 @@ def handler(event: dict, context) -> dict:
                 cur.execute(f"INSERT INTO {SCHEMA}.settings (key, value) VALUES ('min_mentions', %s) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value", (str(int(body["min_mentions"])),))
             conn.commit()
             return {"statusCode": 200, "headers": CORS, "body": json.dumps({"ok": True})}
+
+        # --- vk_token_save ---
+        if action == "vk_token_save":
+            token = body.get("token", "").strip()
+            if not token:
+                return {"statusCode": 400, "headers": CORS, "body": json.dumps({"error": "token required"})}
+            cur.execute(
+                f"INSERT INTO {SCHEMA}.settings (key, value) VALUES ('vk_token', %s) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value",
+                (token,)
+            )
+            conn.commit()
+            return {"statusCode": 200, "headers": CORS, "body": json.dumps({"ok": True})}
+
+        # --- vk_token_get ---
+        if action == "vk_token_get":
+            cur.execute(f"SELECT value FROM {SCHEMA}.settings WHERE key='vk_token'")
+            row = cur.fetchone()
+            has_token = bool(row and row[0])
+            masked = None
+            if has_token:
+                v = row[0]
+                masked = v[:8] + "..." + v[-4:] if len(v) > 12 else "***"
+            return {"statusCode": 200, "headers": CORS, "body": json.dumps({"has_token": has_token, "masked": masked})}
 
         return {"statusCode": 400, "headers": CORS, "body": json.dumps({"error": "Unknown action"})}
 

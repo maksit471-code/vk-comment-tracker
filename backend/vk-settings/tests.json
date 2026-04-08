@@ -6,6 +6,13 @@
       "path": "/",
       "expectedStatus": 200,
       "bodyMatcher": "partial"
+    },
+    {
+      "name": "GET vk_token status",
+      "method": "GET",
+      "path": "/?action=vk_token_get",
+      "expectedStatus": 200,
+      "bodyMatcher": "partial"
     }
   ]
 }

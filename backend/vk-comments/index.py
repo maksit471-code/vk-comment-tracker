@@ -11,8 +11,17 @@ import urllib.request
 import urllib.parse
 
 SCHEMA = os.environ.get("MAIN_DB_SCHEMA", "t_p94871206_vk_comment_tracker")
-VK_TOKEN = os.environ.get("VK_ACCESS_TOKEN", "")
 TG_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+
+
+def get_vk_token(conn) -> str:
+    """Читает токен из БД, если нет — берёт из переменной окружения."""
+    cur = conn.cursor()
+    cur.execute(f"SELECT value FROM {SCHEMA}.settings WHERE key='vk_token'")
+    row = cur.fetchone()
+    if row and row[0]:
+        return row[0]
+    return os.environ.get("VK_ACCESS_TOKEN", "")
 VK_API = "https://api.vk.com/method"
 VK_VERSION = "5.199"
 
@@ -23,8 +32,8 @@ CORS = {
 }
 
 
-def vk_request(method: str, params: dict) -> dict:
-    params["access_token"] = VK_TOKEN
+def vk_request(method: str, params: dict, token: str) -> dict:
+    params["access_token"] = token
     params["v"] = VK_VERSION
     url = f"{VK_API}/{method}?" + urllib.parse.urlencode(params)
     with urllib.request.urlopen(url, timeout=15) as r:
@@ -54,12 +63,12 @@ def check_keywords(text: str, keywords: list) -> list:
     return [kw for kw in keywords if kw["word"].lower() in text_lower]
 
 
-def fetch_comments_for_group(conn, group_id: int, vk_id: int, screen_name: str) -> list:
+def fetch_comments_for_group(conn, group_id: int, vk_id: int, screen_name: str, token: str) -> list:
     """Собирает последние комментарии из постов группы, возвращает список новых."""
     new_comments = []
 
     # Обновляем данные группы
-    gdata = vk_request("groups.getById", {"group_id": str(vk_id), "fields": "members_count,photo_200"})
+    gdata = vk_request("groups.getById", {"group_id": str(vk_id), "fields": "members_count,photo_200"}, token)
     groups_list = gdata.get("response", {}).get("groups", [])
     if groups_list:
         g = groups_list[0]
@@ -71,7 +80,7 @@ def fetch_comments_for_group(conn, group_id: int, vk_id: int, screen_name: str) 
         conn.commit()
 
     # Получаем последние 10 постов
-    wall = vk_request("wall.get", {"owner_id": f"-{vk_id}", "count": 10, "fields": "id"})
+    wall = vk_request("wall.get", {"owner_id": f"-{vk_id}", "count": 10, "fields": "id"}, token)
     posts = wall.get("response", {}).get("items", [])
 
     for post in posts:
@@ -82,7 +91,7 @@ def fetch_comments_for_group(conn, group_id: int, vk_id: int, screen_name: str) 
             "count": 100,
             "fields": "photo_50",
             "extended": 1,
-        })
+        }, token)
         comments = cdata.get("response", {}).get("items", [])
         profiles = {p["id"]: p for p in cdata.get("response", {}).get("profiles", [])}
 
@@ -170,12 +179,15 @@ def handler(event: dict, context) -> dict:
             "keyword_hits_today": keyword_hits_today,
         })}
 
-    if not VK_TOKEN:
-        return {"statusCode": 400, "headers": CORS, "body": json.dumps({"error": "VK_ACCESS_TOKEN не настроен"})}
-
     # POST /fetch — запустить сбор
     if method == "POST" and path.endswith("/fetch"):
         conn = get_conn()
+        vk_token = get_vk_token(conn)
+
+        if not vk_token:
+            conn.close()
+            return {"statusCode": 400, "headers": CORS, "body": json.dumps({"error": "VK токен не настроен. Добавьте токен в разделе Настройки"})}
+
         cur = conn.cursor()
 
         # Загружаем активные группы
@@ -201,7 +213,7 @@ def handler(event: dict, context) -> dict:
         all_new_comments = []
         for (group_id, vk_id, screen_name, group_name) in active_groups:
             try:
-                new = fetch_comments_for_group(conn, group_id, vk_id, screen_name)
+                new = fetch_comments_for_group(conn, group_id, vk_id, screen_name, vk_token)
                 for c in new:
                     c["group_name"] = group_name
                 all_new_comments.extend(new)

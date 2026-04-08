@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Icon from '@/components/ui/icon';
 
 const TG_API = 'https://functions.poehali.dev/5dcabbf3-158f-46c1-af6b-667245e03b9b';
@@ -8,10 +8,59 @@ export default function Settings() {
   const [name, setName] = useState('BSF');
   const [email, setEmail] = useState('vkrsamara2026@mail.ru');
   const [company, setCompany] = useState('BSF');
-  const [apiKey, setApiKey] = useState('vk1.a.XXXXXXXX-XXXX-XXXX-XXXX');
   const [timezone, setTimezone] = useState('Europe/Moscow');
   const [refreshInterval, setRefreshInterval] = useState(() => localStorage.getItem('monitor_interval') || '5');
   const [saved, setSaved] = useState(false);
+
+  const [vkToken, setVkToken] = useState('');
+  const [vkMasked, setVkMasked] = useState<string | null>(null);
+  const [vkHasToken, setVkHasToken] = useState(false);
+  const [vkSaving, setVkSaving] = useState(false);
+  const [vkStatus, setVkStatus] = useState<'idle' | 'ok' | 'error'>('idle');
+  const [vkError, setVkError] = useState('');
+  const [vkShowInput, setVkShowInput] = useState(false);
+
+  useEffect(() => {
+    fetch(`${SETTINGS_API}?action=vk_token_get`)
+      .then(r => r.text())
+      .then(t => {
+        const d = JSON.parse(t);
+        setVkHasToken(d.has_token);
+        setVkMasked(d.masked || null);
+        if (!d.has_token) setVkShowInput(true);
+      })
+      .catch(() => setVkShowInput(true));
+  }, []);
+
+  const saveVkToken = async () => {
+    if (!vkToken.trim()) return;
+    setVkSaving(true);
+    setVkError('');
+    try {
+      const res = await fetch(SETTINGS_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'vk_token_save', token: vkToken.trim() }),
+      });
+      const d = JSON.parse(await res.text());
+      if (d.ok) {
+        setVkStatus('ok');
+        setVkHasToken(true);
+        const v = vkToken.trim();
+        setVkMasked(v.slice(0, 8) + '...' + v.slice(-4));
+        setVkToken('');
+        setVkShowInput(false);
+      } else {
+        setVkError(d.error || 'Ошибка');
+        setVkStatus('error');
+      }
+    } catch {
+      setVkError('Ошибка соединения');
+      setVkStatus('error');
+    } finally {
+      setVkSaving(false);
+    }
+  };
 
   const [tgUsername, setTgUsername] = useState('Vkr163sm');
   const [tgChatId, setTgChatId] = useState<number | null>(null);
@@ -100,38 +149,74 @@ export default function Settings() {
 
       {/* VK API */}
       <div className="bg-card border border-border rounded-lg overflow-hidden">
-        <div className="px-6 py-4 border-b border-border flex items-center gap-3">
-          <Icon name="Key" size={15} className="text-muted-foreground" />
-          <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">ВКонтакте API</h2>
+        <div className="px-6 py-4 border-b border-border flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <Icon name="Key" size={15} className="text-muted-foreground" />
+            <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">ВКонтакте API</h2>
+          </div>
+          {vkHasToken && !vkShowInput && (
+            <button
+              onClick={() => { setVkShowInput(true); setVkStatus('idle'); }}
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Заменить токен
+            </button>
+          )}
         </div>
         <div className="px-6 py-5 space-y-4">
-          <div>
-            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block">Токен доступа</label>
-            <div className="relative">
-              <input
-                type="password"
-                value={apiKey}
-                onChange={e => setApiKey(e.target.value)}
-                className="w-full px-3 py-2.5 text-sm bg-background border border-border rounded-lg outline-none focus:border-foreground/40 transition-colors font-mono"
-              />
+          {vkHasToken && !vkShowInput ? (
+            <div className="flex items-center gap-3 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+              <div>
+                <span className="text-xs text-emerald-700 font-medium">Токен подключён · API v5.199</span>
+                {vkMasked && <p className="text-xs text-emerald-600 font-mono mt-0.5">{vkMasked}</p>}
+              </div>
             </div>
-            <p className="text-xs text-muted-foreground mt-1.5">
-              Получите токен на{' '}
-              <a
-                href="https://vkhost.github.io/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary underline underline-offset-2 hover:opacity-75 transition-opacity"
-              >
-                vkhost.github.io
-              </a>{' '}
-              — выберите «Kate Mobile», разрешите доступ и скопируйте токен из адресной строки
-            </p>
-          </div>
-          <div className="flex items-center gap-3 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
-            <span className="text-xs text-emerald-700 font-medium">Подключение активно · API v5.199</span>
-          </div>
+          ) : (
+            <div>
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block">
+                Токен доступа VK
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="password"
+                  value={vkToken}
+                  onChange={e => { setVkToken(e.target.value); setVkStatus('idle'); }}
+                  placeholder="vk1.a.XXXXXXXXXXXX..."
+                  className="flex-1 px-3 py-2.5 text-sm bg-background border border-border rounded-lg outline-none focus:border-foreground/40 transition-colors font-mono"
+                />
+                <button
+                  onClick={saveVkToken}
+                  disabled={vkSaving || !vkToken.trim()}
+                  className="px-4 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 whitespace-nowrap"
+                >
+                  {vkSaving ? 'Сохраняю...' : 'Сохранить'}
+                </button>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1.5">
+                Получите токен на{' '}
+                <a
+                  href="https://vkhost.github.io/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary underline underline-offset-2 hover:opacity-75 transition-opacity"
+                >
+                  vkhost.github.io
+                </a>{' '}
+                — выберите «Kate Mobile», разрешите доступ и скопируйте токен из адресной строки
+              </p>
+              {vkStatus === 'ok' && (
+                <div className="flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-700 font-medium mt-2">
+                  <Icon name="CheckCircle" size={13} /> Токен сохранён — мониторинг запущен
+                </div>
+              )}
+              {vkStatus === 'error' && (
+                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 mt-2">
+                  <Icon name="AlertCircle" size={13} /> {vkError}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
