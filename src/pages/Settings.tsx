@@ -2,6 +2,7 @@ import { useState } from 'react';
 import Icon from '@/components/ui/icon';
 
 const TG_API = 'https://functions.poehali.dev/5dcabbf3-158f-46c1-af6b-667245e03b9b';
+const SETTINGS_API = 'https://functions.poehali.dev/ed7f08a0-3361-404a-8c7d-5c5398295948';
 
 export default function Settings() {
   const [name, setName] = useState('BSF');
@@ -32,6 +33,12 @@ export default function Settings() {
       if (data.ok) {
         setTgChatId(data.chat_id);
         setTgStatus('ok');
+        // Сохраняем chat_id в БД для автоматических уведомлений
+        await fetch(`${SETTINGS_API}/notify`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tg_chat_id: data.chat_id }),
+        });
       } else {
         setTgError(data.error || 'Ошибка');
         setTgStatus('error');

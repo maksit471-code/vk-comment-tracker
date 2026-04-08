@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Icon from '@/components/ui/icon';
+
+const API = 'https://functions.poehali.dev/ed7f08a0-3361-404a-8c7d-5c5398295948';
 
 interface KeywordItem {
   id: number;
@@ -8,54 +10,76 @@ interface KeywordItem {
   hits: number;
 }
 
-interface NotifChannel {
-  id: string;
-  label: string;
-  icon: string;
-  enabled: boolean;
-  desc: string;
-}
-
-const initialKeywords: KeywordItem[] = [
-  { id: 1, word: 'угроза городу', active: true, hits: 0 },
-  { id: 2, word: 'взорвать', active: true, hits: 0 },
-  { id: 3, word: 'удар по', active: true, hits: 0 },
-  { id: 4, word: 'экстремизм', active: true, hits: 0 },
-  { id: 5, word: 'теракт', active: true, hits: 0 },
-  { id: 6, word: 'радикальный', active: false, hits: 0 },
-];
-
-const initialChannels: NotifChannel[] = [
-  { id: 'email', label: 'Email', icon: 'Mail', enabled: true, desc: 'Ежедневный отчёт на vkrsamara2026@mail.ru' },
-  { id: 'telegram', label: 'Telegram', icon: 'Send', enabled: false, desc: 'Мгновенные уведомления в бот' },
-  { id: 'push', label: 'Push-уведомления', icon: 'Bell', enabled: true, desc: 'В браузере' },
-];
-
-const sentimentFilters = ['Все', 'Только негативные', 'Только позитивные'];
-
 export default function Notifications() {
-  const [keywords, setKeywords] = useState(initialKeywords);
-  const [channels, setChannels] = useState(initialChannels);
+  const [keywords, setKeywords] = useState<KeywordItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const [newWord, setNewWord] = useState('');
-  const [sentimentFilter, setSentimentFilter] = useState('Все');
+
+  const [tgChatId, setTgChatId] = useState<string | null>(null);
+  const [tgEnabled, setTgEnabled] = useState(false);
   const [minMentions, setMinMentions] = useState(1);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
 
-  const toggleKeyword = (id: number) => {
-    setKeywords(prev => prev.map(k => k.id === id ? { ...k, active: !k.active } : k));
+  useEffect(() => {
+    Promise.all([
+      fetch(`${API}/keywords`).then(r => r.json()).catch(() => []),
+      fetch(`${API}/notify`).then(r => r.json()).catch(() => ({})),
+    ]).then(([kws, notify]) => {
+      if (Array.isArray(kws)) setKeywords(kws);
+      if (notify && typeof notify === 'object') {
+        setTgChatId(notify.tg_chat_id || null);
+        setTgEnabled(!!notify.tg_enabled);
+        setMinMentions(notify.min_mentions || 1);
+      }
+    }).finally(() => setLoading(false));
+  }, []);
+
+  const toggleKeyword = async (kw: KeywordItem) => {
+    setKeywords(prev => prev.map(k => k.id === kw.id ? { ...k, active: !k.active } : k));
+    await fetch(`${API}/keywords`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: kw.id, active: !kw.active }),
+    });
   };
 
-  const removeKeyword = (id: number) => {
+  const removeKeyword = async (id: number) => {
     setKeywords(prev => prev.filter(k => k.id !== id));
+    await fetch(`${API}/keywords`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    });
   };
 
-  const addKeyword = () => {
+  const addKeyword = async () => {
     if (!newWord.trim()) return;
-    setKeywords(prev => [...prev, { id: Date.now(), word: newWord.trim(), active: true, hits: 0 }]);
-    setNewWord('');
+    const res = await fetch(`${API}/keywords`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ word: newWord.trim() }),
+    });
+    const data = await res.json();
+    if (data.id) {
+      setKeywords(prev => {
+        const exists = prev.find(k => k.id === data.id);
+        return exists ? prev.map(k => k.id === data.id ? data : k) : [...prev, data];
+      });
+      setNewWord('');
+    }
   };
 
-  const toggleChannel = (id: string) => {
-    setChannels(prev => prev.map(c => c.id === id ? { ...c, enabled: !c.enabled } : c));
+  const saveNotifySettings = async () => {
+    setSaving(true);
+    await fetch(`${API}/notify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tg_chat_id: tgChatId, tg_enabled: tgEnabled, min_mentions: minMentions }),
+    });
+    setSaving(false);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2500);
   };
 
   return (
@@ -69,26 +93,35 @@ export default function Notifications() {
       <div className="bg-card border border-border rounded-lg overflow-hidden">
         <div className="px-6 py-4 border-b border-border flex items-center justify-between">
           <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">Ключевые слова</h2>
-          <span className="text-xs font-mono text-muted-foreground">{keywords.filter(k => k.active).length} активных</span>
+          <span className="text-xs font-mono text-muted-foreground">
+            {loading ? '...' : `${keywords.filter(k => k.active).length} активных`}
+          </span>
         </div>
 
-        <div className="divide-y divide-border">
-          {keywords.map(k => (
-            <div key={k.id} className="px-6 py-3.5 flex items-center gap-4">
-              <button
-                onClick={() => toggleKeyword(k.id)}
-                className={`w-9 h-5 rounded-full transition-colors relative shrink-0 ${k.active ? 'bg-primary' : 'bg-muted'}`}
-              >
-                <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${k.active ? 'left-4' : 'left-0.5'}`} />
-              </button>
-              <span className={`font-medium flex-1 ${!k.active && 'text-muted-foreground line-through'}`}>{k.word}</span>
-              <span className="text-xs font-mono text-muted-foreground">{k.hits} упом.</span>
-              <button onClick={() => removeKeyword(k.id)} className="text-muted-foreground hover:text-destructive transition-colors">
-                <Icon name="X" size={14} />
-              </button>
-            </div>
-          ))}
-        </div>
+        {loading ? (
+          <div className="px-6 py-8 text-sm text-muted-foreground text-center">Загрузка...</div>
+        ) : (
+          <div className="divide-y divide-border">
+            {keywords.map(k => (
+              <div key={k.id} className="px-6 py-3.5 flex items-center gap-4">
+                <button
+                  onClick={() => toggleKeyword(k)}
+                  className={`w-9 h-5 rounded-full transition-colors relative shrink-0 ${k.active ? 'bg-primary' : 'bg-muted'}`}
+                >
+                  <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${k.active ? 'left-4' : 'left-0.5'}`} />
+                </button>
+                <span className={`font-medium flex-1 ${!k.active && 'text-muted-foreground line-through'}`}>{k.word}</span>
+                <span className="text-xs font-mono text-muted-foreground">{k.hits} упом.</span>
+                <button onClick={() => removeKeyword(k.id)} className="text-muted-foreground hover:text-destructive transition-colors">
+                  <Icon name="X" size={14} />
+                </button>
+              </div>
+            ))}
+            {keywords.length === 0 && (
+              <div className="px-6 py-6 text-sm text-muted-foreground text-center">Нет ключевых слов</div>
+            )}
+          </div>
+        )}
 
         <div className="px-6 py-4 border-t border-border flex gap-2">
           <input
@@ -101,37 +134,40 @@ export default function Notifications() {
           />
           <button
             onClick={addKeyword}
-            className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors"
+            disabled={!newWord.trim()}
+            className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
           >
             <Icon name="Plus" size={15} />
           </button>
         </div>
       </div>
 
-      {/* Filters */}
+      {/* Telegram notify settings */}
       <div className="bg-card border border-border rounded-lg overflow-hidden">
-        <div className="px-6 py-4 border-b border-border">
-          <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">Фильтры</h2>
+        <div className="px-6 py-4 border-b border-border flex items-center gap-3">
+          <Icon name="Send" size={15} className="text-muted-foreground" />
+          <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">Telegram-уведомления</h2>
         </div>
         <div className="px-6 py-5 space-y-5">
-          <div>
-            <label className="text-sm font-medium mb-2.5 block">Тональность</label>
-            <div className="flex gap-2 flex-wrap">
-              {sentimentFilters.map(f => (
-                <button
-                  key={f}
-                  onClick={() => setSentimentFilter(f)}
-                  className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
-                    sentimentFilter === f
-                      ? 'bg-primary text-primary-foreground border-primary'
-                      : 'border-border hover:border-foreground/30'
-                  }`}
-                >
-                  {f}
-                </button>
-              ))}
+
+          {/* Toggle */}
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">Мгновенные уведомления</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {tgChatId ? `Подключено · chat_id: ${tgChatId}` : 'Настройте аккаунт в разделе Настройки'}
+              </p>
             </div>
+            <button
+              onClick={() => setTgEnabled(v => !v)}
+              disabled={!tgChatId}
+              className={`w-9 h-5 rounded-full transition-colors relative shrink-0 disabled:opacity-40 ${tgEnabled ? 'bg-primary' : 'bg-muted'}`}
+            >
+              <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${tgEnabled ? 'left-4' : 'left-0.5'}`} />
+            </button>
           </div>
+
+          {/* Min mentions */}
           <div>
             <label className="text-sm font-medium mb-2.5 flex items-center justify-between">
               Мин. упоминаний для оповещения
@@ -146,30 +182,23 @@ export default function Notifications() {
               <span>1</span><span>20</span>
             </div>
           </div>
-        </div>
-      </div>
 
-      {/* Channels */}
-      <div className="bg-card border border-border rounded-lg overflow-hidden">
-        <div className="px-6 py-4 border-b border-border">
-          <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">Каналы уведомлений</h2>
-        </div>
-        <div className="divide-y divide-border">
-          {channels.map(c => (
-            <div key={c.id} className="px-6 py-4 flex items-center gap-4">
-              <Icon name={c.icon as any} size={18} className="text-muted-foreground shrink-0" />
-              <div className="flex-1">
-                <p className="text-sm font-medium">{c.label}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">{c.desc}</p>
+          {/* Save */}
+          <div className="flex items-center gap-3 pt-1">
+            <button
+              onClick={saveNotifySettings}
+              disabled={saving}
+              className="px-5 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
+            >
+              {saving ? 'Сохраняю...' : 'Сохранить'}
+            </button>
+            {saved && (
+              <div className="flex items-center gap-2 text-sm text-emerald-600 animate-fade-in">
+                <Icon name="Check" size={15} />
+                Сохранено
               </div>
-              <button
-                onClick={() => toggleChannel(c.id)}
-                className={`w-9 h-5 rounded-full transition-colors relative shrink-0 ${c.enabled ? 'bg-primary' : 'bg-muted'}`}
-              >
-                <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${c.enabled ? 'left-4' : 'left-0.5'}`} />
-              </button>
-            </div>
-          ))}
+            )}
+          </div>
         </div>
       </div>
     </div>

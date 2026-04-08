@@ -12,6 +12,7 @@ import urllib.parse
 
 SCHEMA = os.environ.get("MAIN_DB_SCHEMA", "t_p94871206_vk_comment_tracker")
 VK_TOKEN = os.environ.get("VK_ACCESS_TOKEN", "")
+TG_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 VK_API = "https://api.vk.com/method"
 VK_VERSION = "5.199"
 
@@ -34,11 +35,30 @@ def get_conn():
     return psycopg2.connect(os.environ["DATABASE_URL"])
 
 
-def fetch_comments_for_group(conn, group_id: int, vk_id: int, screen_name: str) -> int:
-    """Собирает последние комментарии из постов группы, возвращает кол-во новых."""
-    saved = 0
+def tg_send(chat_id, text: str):
+    if not TG_TOKEN or not chat_id:
+        return
+    url = f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage"
+    data = json.dumps({"chat_id": chat_id, "text": text, "parse_mode": "HTML"}).encode()
+    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as r:
+            return json.loads(r.read().decode())
+    except Exception:
+        pass
 
-    # Обновляем данные группы (members_count, name, photo)
+
+def check_keywords(text: str, keywords: list) -> list:
+    """Возвращает список ключевых слов, найденных в тексте."""
+    text_lower = text.lower()
+    return [kw for kw in keywords if kw["word"].lower() in text_lower]
+
+
+def fetch_comments_for_group(conn, group_id: int, vk_id: int, screen_name: str) -> list:
+    """Собирает последние комментарии из постов группы, возвращает список новых."""
+    new_comments = []
+
+    # Обновляем данные группы
     gdata = vk_request("groups.getById", {"group_id": str(vk_id), "fields": "members_count,photo_200"})
     groups_list = gdata.get("response", {}).get("groups", [])
     if groups_list:
@@ -50,14 +70,12 @@ def fetch_comments_for_group(conn, group_id: int, vk_id: int, screen_name: str) 
         )
         conn.commit()
 
-    # Получаем последние 10 постов группы
+    # Получаем последние 10 постов
     wall = vk_request("wall.get", {"owner_id": f"-{vk_id}", "count": 10, "fields": "id"})
     posts = wall.get("response", {}).get("items", [])
 
     for post in posts:
         post_id = post["id"]
-
-        # Получаем комментарии к посту
         cdata = vk_request("wall.getComments", {
             "owner_id": f"-{vk_id}",
             "post_id": post_id,
@@ -86,18 +104,25 @@ def fetch_comments_for_group(conn, group_id: int, vk_id: int, screen_name: str) 
                     (group_id, vk_post_id, vk_comment_id, author_id, author_name, author_photo, text, published_at)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, to_timestamp(%s))
                 ON CONFLICT (vk_comment_id) DO NOTHING
+                RETURNING id
                 """,
                 (group_id, post_id, c["id"], author_id, author_name, author_photo, text, published_at)
             )
             if cur.rowcount:
-                saved += 1
+                new_comments.append({
+                    "text": text,
+                    "author_name": author_name,
+                    "group_id": group_id,
+                    "vk_post_id": post_id,
+                    "vk_comment_id": c["id"],
+                })
         conn.commit()
 
-    return saved
+    return new_comments
 
 
 def handler(event: dict, context) -> dict:
-    """Сбор комментариев из VK-групп и получение ленты комментариев."""
+    """Сбор комментариев из VK-групп, проверка ключевых слов и отправка Telegram-уведомлений."""
     method = event.get("httpMethod", "GET")
     path = event.get("path", "/")
 
@@ -111,25 +136,81 @@ def handler(event: dict, context) -> dict:
     if method == "POST" and path.endswith("/fetch"):
         conn = get_conn()
         cur = conn.cursor()
-        cur.execute(f"SELECT id, vk_id, screen_name FROM {SCHEMA}.groups WHERE is_active=TRUE")
+
+        # Загружаем активные группы
+        cur.execute(f"SELECT id, vk_id, screen_name, name FROM {SCHEMA}.groups WHERE is_active=TRUE")
         active_groups = cur.fetchall()
 
         if not active_groups:
             conn.close()
-            return {"statusCode": 200, "headers": CORS, "body": json.dumps({"ok": True, "fetched": 0, "groups": 0})}
+            return {"statusCode": 200, "headers": CORS, "body": json.dumps({"ok": True, "fetched": 0, "groups": 0, "alerts": 0})}
 
-        total = 0
-        for (group_id, vk_id, screen_name) in active_groups:
+        # Загружаем активные ключевые слова
+        cur.execute(f"SELECT id, word FROM {SCHEMA}.keywords WHERE active=TRUE")
+        keywords = [{"id": r[0], "word": r[1]} for r in cur.fetchall()]
+
+        # Загружаем настройки Telegram
+        cur.execute(f"SELECT key, value FROM {SCHEMA}.settings WHERE key IN ('tg_chat_id', 'tg_enabled', 'min_mentions')")
+        settings = {r[0]: r[1] for r in cur.fetchall()}
+        tg_chat_id = settings.get("tg_chat_id")
+        tg_enabled = settings.get("tg_enabled") == "true"
+        min_mentions = int(settings.get("min_mentions") or 1)
+
+        # Собираем комментарии
+        all_new_comments = []
+        for (group_id, vk_id, screen_name, group_name) in active_groups:
             try:
-                total += fetch_comments_for_group(conn, group_id, vk_id, screen_name)
-            except Exception as e:
+                new = fetch_comments_for_group(conn, group_id, vk_id, screen_name)
+                for c in new:
+                    c["group_name"] = group_name
+                all_new_comments.extend(new)
+            except Exception:
                 pass
+
+        # Проверяем ключевые слова
+        alerts_sent = 0
+        if keywords and all_new_comments:
+            keyword_hits = {}  # word -> list of comments
+
+            for comment in all_new_comments:
+                matched = check_keywords(comment["text"], keywords)
+                for kw in matched:
+                    if kw["word"] not in keyword_hits:
+                        keyword_hits[kw["word"]] = []
+                    keyword_hits[kw["word"]].append(comment)
+
+            # Обновляем счётчики hits
+            for kw in keywords:
+                count = len(keyword_hits.get(kw["word"], []))
+                if count > 0:
+                    cur.execute(
+                        f"UPDATE {SCHEMA}.keywords SET hits = hits + %s WHERE id = %s",
+                        (count, kw["id"])
+                    )
+            conn.commit()
+
+            # Отправляем Telegram-уведомления
+            if tg_enabled and tg_chat_id:
+                for word, comments in keyword_hits.items():
+                    if len(comments) < min_mentions:
+                        continue
+                    # Берём первые 3 примера
+                    examples = comments[:3]
+                    lines = [f"🔔 <b>Ключевое слово: «{word}»</b>", f"Найдено {len(comments)} упоминаний\n"]
+                    for ex in examples:
+                        short_text = ex["text"][:200] + ("..." if len(ex["text"]) > 200 else "")
+                        lines.append(f"<b>{ex['author_name']}</b> в «{ex.get('group_name', '')}»:")
+                        lines.append(f"<i>{short_text}</i>")
+                        lines.append(f"https://vk.com/wall-{ex['group_id']}_{ex['vk_post_id']}?reply={ex['vk_comment_id']}\n")
+                    tg_send(tg_chat_id, "\n".join(lines))
+                    alerts_sent += 1
 
         conn.close()
         return {"statusCode": 200, "headers": CORS, "body": json.dumps({
             "ok": True,
-            "fetched": total,
+            "fetched": len(all_new_comments),
             "groups": len(active_groups),
+            "alerts": alerts_sent,
         })}
 
     # GET / — лента комментариев
@@ -172,14 +253,9 @@ def handler(event: dict, context) -> dict:
 
         comments = [
             {
-                "id": r[0],
-                "group_id": r[1],
-                "group_name": r[2],
-                "vk_post_id": r[3],
-                "vk_comment_id": r[4],
-                "author_id": r[5],
-                "author_name": r[6],
-                "author_photo": r[7],
+                "id": r[0], "group_id": r[1], "group_name": r[2],
+                "vk_post_id": r[3], "vk_comment_id": r[4],
+                "author_id": r[5], "author_name": r[6], "author_photo": r[7],
                 "text": r[8],
                 "published_at": r[9].isoformat() if r[9] else None,
                 "fetched_at": r[10].isoformat() if r[10] else None,
