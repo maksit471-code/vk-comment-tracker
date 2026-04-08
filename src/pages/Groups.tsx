@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Icon from '@/components/ui/icon';
 
 const API_URL = 'https://functions.poehali.dev/529e9199-86a8-4edf-b41b-2622cfde311b';
+const COMMENTS_URL = 'https://functions.poehali.dev/1ba8f77d-759f-4bd4-bfc3-bd43b661451d';
 
 interface Group {
   id: number;
@@ -38,6 +39,9 @@ export default function Groups() {
   const [error, setError] = useState('');
   const [manualInput, setManualInput] = useState('');
   const [addingManual, setAddingManual] = useState(false);
+  const [fetching, setFetching] = useState(false);
+  const [fetchResult, setFetchResult] = useState<{ fetched: number; groups: number } | null>(null);
+  const [fetchError, setFetchError] = useState('');
 
   const loadGroups = useCallback(async () => {
     setLoading(true);
@@ -132,16 +136,61 @@ export default function Groups() {
     setGroups(prev => prev.filter(g => g.id !== id));
   };
 
+  const startFetch = async () => {
+    setFetching(true);
+    setFetchResult(null);
+    setFetchError('');
+    try {
+      const res = await fetch(`${COMMENTS_URL}/fetch`, { method: 'POST' });
+      const text = await res.text();
+      const data = JSON.parse(text);
+      if (data.error) {
+        setFetchError(data.error);
+      } else {
+        setFetchResult({ fetched: data.fetched, groups: data.groups });
+        // Обновляем данные групп после сбора
+        const gr = await fetch(API_URL);
+        const gtext = await gr.text();
+        const gdata = JSON.parse(gtext);
+        if (Array.isArray(gdata)) setGroups(gdata);
+      }
+    } catch {
+      setFetchError('Ошибка соединения');
+    } finally {
+      setFetching(false);
+    }
+  };
+
   const activeCount = groups.filter(g => g.is_active).length;
 
   return (
     <div className="space-y-8 animate-fade-in">
-      <div>
-        <span className="text-xs font-mono text-muted-foreground tracking-widest uppercase">Мониторинг</span>
-        <h1 className="text-2xl font-semibold tracking-tight mt-1">Группы ВКонтакте</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          {loading ? 'Загрузка...' : `${groups.length} групп · ${activeCount} активных`}
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <span className="text-xs font-mono text-muted-foreground tracking-widest uppercase">Мониторинг</span>
+          <h1 className="text-2xl font-semibold tracking-tight mt-1">Группы ВКонтакте</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {loading ? 'Загрузка...' : `${groups.length} групп · ${activeCount} активных`}
+          </p>
+        </div>
+        <div className="flex flex-col items-end gap-2 shrink-0">
+          <button
+            onClick={startFetch}
+            disabled={fetching || activeCount === 0}
+            className="flex items-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 whitespace-nowrap"
+          >
+            <Icon name={fetching ? 'Loader' : 'Play'} size={15} className={fetching ? 'animate-spin' : ''} />
+            {fetching ? 'Собираю...' : 'Начать мониторинг'}
+          </button>
+          {fetchResult && (
+            <p className="text-xs text-emerald-600 font-mono">
+              Собрано {fetchResult.fetched} комментариев из {fetchResult.groups} групп
+            </p>
+          )}
+          {fetchError && (
+            <p className="text-xs text-red-500 font-mono">{fetchError}</p>
+          )}
+        </div>
       </div>
 
       {/* Search */}

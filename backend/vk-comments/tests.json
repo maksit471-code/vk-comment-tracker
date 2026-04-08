@@ -1,0 +1,11 @@
+{
+  "tests": [
+    {
+      "name": "GET comments feed",
+      "method": "GET",
+      "path": "/",
+      "expectedStatus": 200,
+      "bodyMatcher": "partial"
+    }
+  ]
+}
