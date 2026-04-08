@@ -141,7 +141,7 @@ export default function Groups() {
     setFetchResult(null);
     setFetchError('');
     try {
-      const res = await fetch(`${COMMENTS_URL}/fetch`, { method: 'POST' });
+      const res = await fetch(`${COMMENTS_URL}?action=fetch`, { method: 'POST' });
       const text = await res.text();
       const data = JSON.parse(text);
       if (data.error) {

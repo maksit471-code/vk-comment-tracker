@@ -25,7 +25,7 @@ function useAutoFetch() {
     runningRef.current = true;
     setRunning(true);
     try {
-      await fetch(`${FETCH_URL}/fetch`, { method: 'POST' });
+      await fetch(`${FETCH_URL}?action=fetch`, { method: 'POST' });
       const now = new Date();
       setLastRun(now);
       localStorage.setItem('monitor_last_run', now.toISOString());

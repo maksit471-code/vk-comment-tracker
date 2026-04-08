@@ -181,8 +181,9 @@ def handler(event: dict, context) -> dict:
             "keyword_hits_today": keyword_hits_today,
         })}
 
-    # POST /fetch — запустить сбор
-    if method == "POST" and (path.endswith("/fetch") or path == "/fetch"):
+    # POST ?action=fetch — запустить сбор
+    post_params = event.get("queryStringParameters") or {}
+    if method == "POST" and (post_params.get("action") == "fetch" or path.endswith("/fetch")):
         conn = get_conn()
         vk_token = get_vk_token(conn)
 
