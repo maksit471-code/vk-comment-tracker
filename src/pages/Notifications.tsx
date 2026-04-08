@@ -26,7 +26,7 @@ const initialKeywords: KeywordItem[] = [
 ];
 
 const initialChannels: NotifChannel[] = [
-  { id: 'email', label: 'Email', icon: 'Mail', enabled: true, desc: 'Ежедневный отчёт на почту' },
+  { id: 'email', label: 'Email', icon: 'Mail', enabled: true, desc: 'Ежедневный отчёт на vkrsamara2026@mail.ru' },
   { id: 'telegram', label: 'Telegram', icon: 'Send', enabled: false, desc: 'Мгновенные уведомления в бот' },
   { id: 'push', label: 'Push-уведомления', icon: 'Bell', enabled: true, desc: 'В браузере' },
 ];

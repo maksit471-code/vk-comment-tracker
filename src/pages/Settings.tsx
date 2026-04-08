@@ -3,7 +3,7 @@ import Icon from '@/components/ui/icon';
 
 export default function Settings() {
   const [name, setName] = useState('BSF');
-  const [email, setEmail] = useState('ivan@example.com');
+  const [email, setEmail] = useState('vkrsamara2026@mail.ru');
   const [company, setCompany] = useState('BSF');
   const [apiKey, setApiKey] = useState('vk1.a.XXXXXXXX-XXXX-XXXX-XXXX');
   const [timezone, setTimezone] = useState('Europe/Moscow');
