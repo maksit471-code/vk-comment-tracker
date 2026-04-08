@@ -23,8 +23,16 @@ def tg(method: str, params: dict) -> dict:
     url = f"{TG_API}/bot{BOT_TOKEN}/{method}"
     data = json.dumps(params).encode()
     req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=10) as r:
-        return json.loads(r.read().decode())
+    try:
+        with urllib.request.urlopen(req, timeout=10) as r:
+            return json.loads(r.read().decode())
+    except urllib.error.HTTPError as e:
+        body = e.read().decode()
+        print(f"TG HTTP {e.code}: {body}")
+        try:
+            return json.loads(body)
+        except Exception:
+            return {"ok": False, "description": f"HTTP {e.code}: {body}"}
 
 
 def send_message(chat_id, text: str) -> dict:
