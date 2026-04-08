@@ -135,6 +135,8 @@ def handler(event: dict, context) -> dict:
     method = event.get("httpMethod", "GET")
     path = event.get("path", "/")
 
+    print(f"DEBUG method={method} path={repr(path)}")
+
     if method == "OPTIONS":
         return {"statusCode": 200, "headers": CORS, "body": ""}
 
