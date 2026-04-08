@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import Icon from '@/components/ui/icon';
 
+const TG_API = 'https://functions.poehali.dev/5dcabbf3-158f-46c1-af6b-667245e03b9b';
+
 export default function Settings() {
   const [name, setName] = useState('BSF');
   const [email, setEmail] = useState('vkrsamara2026@mail.ru');
@@ -9,6 +11,36 @@ export default function Settings() {
   const [timezone, setTimezone] = useState('Europe/Moscow');
   const [refreshInterval, setRefreshInterval] = useState('5');
   const [saved, setSaved] = useState(false);
+
+  const [tgUsername, setTgUsername] = useState('vrrser');
+  const [tgChatId, setTgChatId] = useState<number | null>(null);
+  const [tgStatus, setTgStatus] = useState<'idle' | 'sending' | 'ok' | 'error'>('idle');
+  const [tgError, setTgError] = useState('');
+
+  const connectTelegram = async () => {
+    const username = tgUsername.trim().replace(/^@/, '');
+    if (!username) return;
+    setTgStatus('sending');
+    setTgError('');
+    try {
+      const res = await fetch(`${TG_API}/test`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username }),
+      });
+      const data = JSON.parse(await res.text());
+      if (data.ok) {
+        setTgChatId(data.chat_id);
+        setTgStatus('ok');
+      } else {
+        setTgError(data.error || 'Ошибка');
+        setTgStatus('error');
+      }
+    } catch {
+      setTgError('Ошибка соединения');
+      setTgStatus('error');
+    }
+  };
 
   const save = () => {
     setSaved(true);
@@ -90,6 +122,58 @@ export default function Settings() {
             <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
             <span className="text-xs text-emerald-700 font-medium">Подключение активно · API v5.199</span>
           </div>
+        </div>
+      </div>
+
+      {/* Telegram */}
+      <div className="bg-card border border-border rounded-lg overflow-hidden">
+        <div className="px-6 py-4 border-b border-border flex items-center gap-3">
+          <Icon name="Send" size={15} className="text-muted-foreground" />
+          <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">Telegram-уведомления</h2>
+        </div>
+        <div className="px-6 py-5 space-y-4">
+          <div>
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block">
+              Telegram username
+            </label>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">@</span>
+                <input
+                  type="text"
+                  value={tgUsername}
+                  onChange={e => { setTgUsername(e.target.value.replace(/^@/, '')); setTgStatus('idle'); }}
+                  placeholder="username"
+                  className="w-full pl-7 pr-4 py-2.5 text-sm bg-background border border-border rounded-lg outline-none focus:border-foreground/40 transition-colors font-mono"
+                />
+              </div>
+              <button
+                onClick={connectTelegram}
+                disabled={tgStatus === 'sending' || !tgUsername.trim()}
+                className="px-4 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 whitespace-nowrap"
+              >
+                {tgStatus === 'sending' ? 'Отправляю...' : 'Подключить'}
+              </button>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1.5">
+              Сначала напишите боту любое сообщение, затем нажмите «Подключить»
+            </p>
+          </div>
+
+          {tgStatus === 'ok' && (
+            <div className="flex items-center gap-3 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+              <span className="text-xs text-emerald-700 font-medium">
+                Подключено · @{tgUsername} · chat_id: {tgChatId}
+              </span>
+            </div>
+          )}
+          {tgStatus === 'error' && (
+            <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+              <Icon name="AlertCircle" size={14} />
+              {tgError}
+            </div>
+          )}
         </div>
       </div>
 

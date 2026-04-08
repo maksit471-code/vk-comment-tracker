@@ -1,0 +1,11 @@
+{
+  "tests": [
+    {
+      "name": "GET bot status",
+      "method": "GET",
+      "path": "/",
+      "expectedStatus": 405,
+      "bodyMatcher": "partial"
+    }
+  ]
+}
