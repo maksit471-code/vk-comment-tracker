@@ -74,6 +74,7 @@ def handler(event: dict, context) -> dict:
 
         try:
             result = send_message(target, "✅ <b>BSF Monitor</b>\n\nTelegram-уведомления успешно подключены! Вы будете получать оповещения о новых срабатываниях по ключевым словам.")
+            print(f"TG send result: {result}")
             if result.get("ok"):
                 msg = result["result"]
                 return {"statusCode": 200, "headers": CORS, "body": json.dumps({
@@ -81,11 +82,13 @@ def handler(event: dict, context) -> dict:
                     "chat_id": msg["chat"]["id"],
                     "username": msg["chat"].get("username", ""),
                 })}
-            return {"statusCode": 400, "headers": CORS, "body": json.dumps({"ok": False, "error": result.get("description", "Ошибка отправки")})}
+            tg_error = result.get("description", "Ошибка отправки")
+            return {"statusCode": 400, "headers": CORS, "body": json.dumps({"ok": False, "error": tg_error})}
         except Exception as e:
             err = str(e)
+            print(f"TG exception: {err}")
             if "chat not found" in err.lower():
-                return {"statusCode": 400, "headers": CORS, "body": json.dumps({"ok": False, "error": f"Пользователь @{username} не найден. Напишите боту /start и попробуйте снова."})}
+                return {"statusCode": 400, "headers": CORS, "body": json.dumps({"ok": False, "error": f"@{username} не найден. Напишите боту /start и повторите."})}
             return {"statusCode": 400, "headers": CORS, "body": json.dumps({"ok": False, "error": err})}
 
     # send — отправить сообщение
