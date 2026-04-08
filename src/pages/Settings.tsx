@@ -73,7 +73,18 @@ export default function Settings() {
                 className="w-full px-3 py-2.5 text-sm bg-background border border-border rounded-lg outline-none focus:border-foreground/40 transition-colors font-mono"
               />
             </div>
-            <p className="text-xs text-muted-foreground mt-1.5">Получите токен в настройках приложения ВКонтакте</p>
+            <p className="text-xs text-muted-foreground mt-1.5">
+              Получите токен на{' '}
+              <a
+                href="https://vkhost.github.io/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary underline underline-offset-2 hover:opacity-75 transition-opacity"
+              >
+                vkhost.github.io
+              </a>{' '}
+              — выберите «Kate Mobile», разрешите доступ и скопируйте токен из адресной строки
+            </p>
           </div>
           <div className="flex items-center gap-3 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
             <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
