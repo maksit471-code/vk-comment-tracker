@@ -180,7 +180,7 @@ def handler(event: dict, context) -> dict:
         })}
 
     # POST /fetch — запустить сбор
-    if method == "POST" and path.endswith("/fetch"):
+    if method == "POST" and (path.endswith("/fetch") or path == "/fetch"):
         conn = get_conn()
         vk_token = get_vk_token(conn)
 
