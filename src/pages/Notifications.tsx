@@ -17,12 +17,12 @@ interface NotifChannel {
 }
 
 const initialKeywords: KeywordItem[] = [
-  { id: 1, word: 'Nike', active: true, hits: 487 },
-  { id: 2, word: 'Adidas', active: true, hits: 312 },
-  { id: 3, word: 'Puma', active: true, hits: 198 },
-  { id: 4, word: 'Reebok', active: false, hits: 134 },
-  { id: 5, word: 'New Balance', active: true, hits: 97 },
-  { id: 6, word: 'ASICS', active: false, hits: 43 },
+  { id: 1, word: 'угроза городу', active: true, hits: 0 },
+  { id: 2, word: 'взорвать', active: true, hits: 0 },
+  { id: 3, word: 'удар по', active: true, hits: 0 },
+  { id: 4, word: 'экстремизм', active: true, hits: 0 },
+  { id: 5, word: 'теракт', active: true, hits: 0 },
+  { id: 6, word: 'радикальный', active: false, hits: 0 },
 ];
 
 const initialChannels: NotifChannel[] = [

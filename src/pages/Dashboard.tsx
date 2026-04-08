@@ -95,7 +95,7 @@ export default function Dashboard() {
           </button>
         </div>
         <div className="flex flex-wrap gap-2">
-          {['Nike', 'Adidas', 'Puma', 'Reebok', 'New Balance', 'ASICS', 'Under Armour'].map(kw => (
+          {['угроза городу', 'взорвать', 'удар по', 'экстремизм', 'теракт', 'радикальный'].map(kw => (
             <span key={kw} className="px-3 py-1 rounded-full border border-border text-sm hover:border-foreground/40 transition-colors cursor-pointer">
               {kw}
             </span>
