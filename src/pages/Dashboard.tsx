@@ -1,17 +1,10 @@
 import Icon from '@/components/ui/icon';
 
 const stats = [
-  { label: 'Комментариев сегодня', value: '1 284', delta: '+12%', icon: 'MessageSquare', positive: true },
-  { label: 'Упоминаний бренда', value: '347', delta: '+8%', icon: 'AtSign', positive: true },
-  { label: 'Негативных', value: '23', delta: '-4%', icon: 'AlertTriangle', positive: false },
-  { label: 'Отслеживаемых слов', value: '16', delta: null, icon: 'Tag', positive: true },
-];
-
-const recentAlerts = [
-  { id: 1, keyword: 'Nike', text: 'Отличные кроссовки от Nike, рекомендую всем!', source: 'ВКонтакте', time: '2 мин назад', sentiment: 'positive' },
-  { id: 2, keyword: 'Adidas', text: 'Adidas снова разочаровал качеством, возврат...', source: 'ВКонтакте', time: '7 мин назад', sentiment: 'negative' },
-  { id: 3, keyword: 'Nike', text: 'Где купить Nike дешевле? Подскажите магазин', source: 'ВКонтакте', time: '15 мин назад', sentiment: 'neutral' },
-  { id: 4, keyword: 'Puma', text: 'Puma выпустила новую коллекцию, очень стильно', source: 'ВКонтакте', time: '23 мин назад', sentiment: 'positive' },
+  { label: 'Комментариев сегодня', value: '—', delta: null, icon: 'MessageSquare', positive: true },
+  { label: 'Найдено совпадений', value: '—', delta: null, icon: 'AtSign', positive: true },
+  { label: 'Негативных', value: '—', delta: null, icon: 'AlertTriangle', positive: false },
+  { label: 'Групп отслеживается', value: '9', delta: null, icon: 'Users', positive: true },
 ];
 
 const sentimentColor = {
@@ -35,7 +28,7 @@ export default function Dashboard() {
           <span className="text-xs font-mono text-muted-foreground tracking-widest uppercase">Live</span>
         </div>
         <h1 className="text-2xl font-semibold tracking-tight">Обзор</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">8 апреля 2026 · обновлено только что</p>
+        <p className="text-sm text-muted-foreground mt-0.5">Ожидание данных · подключите VK API для старта</p>
       </div>
 
       {/* Stats */}
@@ -47,43 +40,19 @@ export default function Dashboard() {
               <Icon name={s.icon as any} size={15} className="text-muted-foreground shrink-0 mt-0.5" />
             </div>
             <div className="flex items-end justify-between">
-              <span className="text-2xl font-semibold font-mono tracking-tight">{s.value}</span>
-              {s.delta && (
-                <span className={`text-xs font-mono font-medium ${s.positive ? 'text-emerald-600' : 'text-red-500'}`}>
-                  {s.delta}
-                </span>
-              )}
+              <span className="text-2xl font-semibold font-mono tracking-tight text-muted-foreground">{s.value}</span>
             </div>
           </div>
         ))}
       </div>
 
-      {/* Recent alerts */}
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">Последние совпадения</h2>
-          <button className="text-xs text-muted-foreground hover:text-foreground transition-colors">все →</button>
-        </div>
-        <div className="space-y-2">
-          {recentAlerts.map((a, i) => (
-            <div
-              key={a.id}
-              className="bg-card border border-border rounded-lg px-5 py-4 flex items-start gap-4 hover:border-foreground/20 transition-colors"
-              style={{ animationDelay: `${i * 50}ms` }}
-            >
-              <span className="mt-0.5 px-2 py-0.5 rounded text-xs font-medium bg-primary text-primary-foreground shrink-0">
-                {a.keyword}
-              </span>
-              <p className="text-sm leading-relaxed flex-1 text-foreground/80">{a.text}</p>
-              <div className="flex flex-col items-end gap-1.5 shrink-0">
-                <span className={`text-xs px-2 py-0.5 rounded font-medium ${sentimentColor[a.sentiment as keyof typeof sentimentColor]}`}>
-                  {sentimentLabel[a.sentiment as keyof typeof sentimentLabel]}
-                </span>
-                <span className="text-xs text-muted-foreground font-mono">{a.time}</span>
-              </div>
-            </div>
-          ))}
-        </div>
+      {/* Empty state */}
+      <div className="bg-card border border-border rounded-lg px-6 py-12 flex flex-col items-center text-center gap-3">
+        <Icon name="Radar" size={32} className="text-muted-foreground" />
+        <p className="text-sm font-medium">Нет данных для отображения</p>
+        <p className="text-xs text-muted-foreground max-w-xs leading-relaxed">
+          Добавьте токен VK API в настройках — и мониторинг 9 групп запустится автоматически
+        </p>
       </div>
 
       {/* Quick keywords */}
