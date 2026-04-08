@@ -129,6 +129,47 @@ def handler(event: dict, context) -> dict:
     if method == "OPTIONS":
         return {"statusCode": 200, "headers": CORS, "body": ""}
 
+    # GET /stats — сводная статистика для дашборда (не требует VK токена)
+    params_early = event.get("queryStringParameters") or {}
+    if method == "GET" and params_early.get("action") == "stats":
+        conn = get_conn()
+        cur = conn.cursor()
+
+        cur.execute(f"SELECT COUNT(*) FROM {SCHEMA}.comments WHERE fetched_at >= CURRENT_DATE")
+        today_count = cur.fetchone()[0]
+
+        cur.execute(f"SELECT COUNT(*) FROM {SCHEMA}.comments WHERE sentiment = 'negative'")
+        negative_count = cur.fetchone()[0]
+
+        cur.execute(f"SELECT COUNT(*) FROM {SCHEMA}.keywords WHERE active = TRUE")
+        active_keywords = cur.fetchone()[0]
+
+        cur.execute(f"SELECT COUNT(*) FROM {SCHEMA}.groups WHERE is_active = TRUE")
+        active_groups = cur.fetchone()[0]
+
+        cur.execute(f"SELECT COUNT(*) FROM {SCHEMA}.comments")
+        total_count = cur.fetchone()[0]
+
+        cur.execute(f"""
+            SELECT COUNT(*) FROM {SCHEMA}.comments c
+            WHERE fetched_at >= CURRENT_DATE
+            AND EXISTS (
+                SELECT 1 FROM {SCHEMA}.keywords k
+                WHERE k.active = TRUE AND lower(c.text) LIKE '%' || lower(k.word) || '%'
+            )
+        """)
+        keyword_hits_today = cur.fetchone()[0]
+
+        conn.close()
+        return {"statusCode": 200, "headers": CORS, "body": json.dumps({
+            "today_count": today_count,
+            "negative_count": negative_count,
+            "active_keywords": active_keywords,
+            "active_groups": active_groups,
+            "total_count": total_count,
+            "keyword_hits_today": keyword_hits_today,
+        })}
+
     if not VK_TOKEN:
         return {"statusCode": 400, "headers": CORS, "body": json.dumps({"error": "VK_ACCESS_TOKEN не настроен"})}
 
