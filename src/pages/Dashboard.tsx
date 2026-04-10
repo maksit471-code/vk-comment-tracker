@@ -186,27 +186,43 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {statCards.map((s, i) => (
-          <div
-            key={i}
-            className={`bg-card border border-border rounded-lg p-5 flex flex-col gap-3 transition-colors ${s.clickable ? 'cursor-pointer hover:border-foreground/40' : ''}`}
-            style={{ animationDelay: `${i * 60}ms` }}
-            onClick={() => s.clickable && setModal({ action: s.action, title: s.modalTitle })}
-          >
-            <div className="flex items-start justify-between">
-              <span className="text-xs text-muted-foreground font-medium leading-tight">{s.label}</span>
-              <div className="flex items-center gap-1">
-                <Icon name={s.icon} size={15} className="text-muted-foreground shrink-0 mt-0.5" />
-                {s.clickable && <Icon name="ChevronRight" size={13} className="text-muted-foreground shrink-0 mt-0.5" />}
+        {statCards.map((s, i) => {
+          const inner = (
+            <>
+              <div className="flex items-start justify-between">
+                <span className="text-xs text-muted-foreground font-medium leading-tight">{s.label}</span>
+                <div className="flex items-center gap-1">
+                  <Icon name={s.icon} size={15} className="text-muted-foreground shrink-0 mt-0.5" />
+                  {s.clickable && <Icon name="ChevronRight" size={13} className="text-muted-foreground shrink-0 mt-0.5" />}
+                </div>
               </div>
+              <div className="flex items-end justify-between">
+                <span className={`text-2xl font-semibold font-mono tracking-tight ${loading ? 'text-muted-foreground' : 'text-foreground'}`}>
+                  {s.value}
+                </span>
+              </div>
+            </>
+          );
+          return s.clickable ? (
+            <button
+              key={i}
+              type="button"
+              className="bg-card border border-border rounded-lg p-5 flex flex-col gap-3 transition-colors cursor-pointer hover:border-foreground/40 text-left w-full"
+              style={{ animationDelay: `${i * 60}ms` }}
+              onClick={() => setModal({ action: s.action, title: s.modalTitle })}
+            >
+              {inner}
+            </button>
+          ) : (
+            <div
+              key={i}
+              className="bg-card border border-border rounded-lg p-5 flex flex-col gap-3 transition-colors"
+              style={{ animationDelay: `${i * 60}ms` }}
+            >
+              {inner}
             </div>
-            <div className="flex items-end justify-between">
-              <span className={`text-2xl font-semibold font-mono tracking-tight ${loading ? 'text-muted-foreground' : 'text-foreground'}`}>
-                {s.value}
-              </span>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {isEmpty ? (
