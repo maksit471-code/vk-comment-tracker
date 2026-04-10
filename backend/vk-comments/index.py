@@ -351,19 +351,36 @@ def handler(event: dict, context) -> dict:
 
             # Отправляем Telegram-уведомления
             if tg_enabled and tg_chat_id:
+                # Собираем все уникальные комментарии-совпадения
+                seen_ids = set()
+                all_hits = []
                 for word, comments in keyword_hits.items():
-                    if len(comments) < min_mentions:
-                        continue
-                    # Берём первые 3 примера
-                    examples = comments[:3]
-                    lines = [f"🔔 <b>Ключевое слово: «{word}»</b>", f"Найдено {len(comments)} упоминаний\n"]
-                    for ex in examples:
-                        short_text = ex["text"][:200] + ("..." if len(ex["text"]) > 200 else "")
-                        lines.append(f"<b>{ex['author_name']}</b> в «{ex.get('group_name', '')}»:")
-                        lines.append(f"<i>{short_text}</i>")
-                        lines.append(f"https://vk.com/wall-{ex['group_id']}_{ex['vk_post_id']}?reply={ex['vk_comment_id']}\n")
-                    tg_send(tg_chat_id, "\n".join(lines))
-                    alerts_sent += 1
+                    for c in comments:
+                        if c["vk_comment_id"] not in seen_ids:
+                            seen_ids.add(c["vk_comment_id"])
+                            all_hits.append((word, c))
+
+                if len(all_hits) >= min_mentions:
+                    for word, ex in all_hits[:20]:  # не более 20 сообщений за раз
+                        author_id = ex.get("author_id", 0)
+                        author_name = ex.get("author_name") or f"id{author_id}"
+                        comment_url = f"https://vk.com/wall-{ex['group_id']}_{ex['vk_post_id']}?reply={ex['vk_comment_id']}"
+                        short_text = ex["text"][:500] + ("..." if len(ex["text"]) > 500 else "")
+                        lines = [
+                            f"🔔 <b>Ключевое слово: «{word}»</b>",
+                            f"",
+                            f"👤 <b>ID:</b> {author_id}",
+                            f"🔗 <b>Профиль:</b> https://vk.com/id{author_id}",
+                            f"📛 <b>ФИО:</b> {author_name}",
+                            f"",
+                            f"💬 <b>Ссылка на комментарий:</b>",
+                            comment_url,
+                            f"",
+                            f"📄 <b>Текст:</b>",
+                            f"<i>{short_text}</i>",
+                        ]
+                        tg_send(tg_chat_id, "\n".join(lines))
+                        alerts_sent += 1
 
         conn.close()
         return {"statusCode": 200, "headers": CORS, "body": json.dumps({
