@@ -1,0 +1,11 @@
+{
+  "tests": [
+    {
+      "name": "GET scheduler trigger",
+      "method": "GET",
+      "path": "/",
+      "expectedStatus": 200,
+      "bodyMatcher": "partial"
+    }
+  ]
+}
