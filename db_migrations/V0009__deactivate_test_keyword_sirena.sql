@@ -1,0 +1,1 @@
+UPDATE t_p94871206_vk_comment_tracker.keywords SET active = FALSE WHERE word = 'сирена';
