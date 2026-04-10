@@ -1,0 +1,1 @@
+UPDATE t_p94871206_vk_comment_tracker.settings SET value = 'vk1.a.J7s8JpvXEwWiP9zTjl6pvxxQdkvQibWDLif_K-W2_m0bc61Et3RkOpTwkTo188IrXLbNKL1ihAZB2Dgt5gzl-Nx8kv17-agAfSwEdwkXZcldV06AoRKtFHtA8UgpC5b1kEUiNlSH0sCFH1zDssSHyeg3si9gCkiYTHrEkGc4L40q50eHtFfNQE5WR-jW437KvGDN7j4dLHkzQJwxmrmJtg' WHERE key = 'vk_token';

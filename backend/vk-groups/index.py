@@ -1,4 +1,4 @@
-"""  # v2
+"""  # v3
 Управление группами ВКонтакте для мониторинга комментариев.
 GET / — список всех групп
 GET /?action=refresh — обновить vk_id и members_count всех групп через VK API
@@ -70,6 +70,7 @@ def handler(event: dict, context) -> dict:
 
         updated = 0
         errors = []
+        token_preview = vk_token[:20] + "..." if vk_token else "EMPTY"
         for (db_id, screen_name) in groups:
             try:
                 data = vk_request("groups.getById", {
@@ -94,7 +95,7 @@ def handler(event: dict, context) -> dict:
                 errors.append(f"{screen_name}: {e}")
 
         conn.close()
-        return {"statusCode": 200, "headers": CORS, "body": json.dumps({"ok": True, "updated": updated, "errors": errors})}
+        return {"statusCode": 200, "headers": CORS, "body": json.dumps({"ok": True, "updated": updated, "errors": errors, "token_used": token_preview})}
 
     # GET /search — поиск через VK API
     if method == "GET" and path.endswith("/search"):
