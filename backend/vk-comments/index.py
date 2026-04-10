@@ -181,6 +181,47 @@ def handler(event: dict, context) -> dict:
             "keyword_hits_today": keyword_hits_today,
         })}
 
+    # GET ?action=analytics — рейтинг групп и активность по дням
+    if method == "GET" and params_early.get("action") == "analytics":
+        conn = get_conn()
+        cur = conn.cursor()
+
+        # Рейтинг групп
+        cur.execute(f"""
+            SELECT g.id, g.name, g.members_count, COUNT(c.id) as comments_count,
+                   COUNT(CASE WHEN c.sentiment='negative' THEN 1 END) as negative_count
+            FROM {SCHEMA}.groups g
+            LEFT JOIN {SCHEMA}.comments c ON c.group_id = g.id
+            WHERE g.is_active = TRUE
+            GROUP BY g.id, g.name, g.members_count
+            ORDER BY comments_count DESC
+        """)
+        groups_rating = [
+            {"id": r[0], "name": r[1], "members_count": r[2], "comments_count": r[3], "negative_count": r[4]}
+            for r in cur.fetchall()
+        ]
+
+        # Активность по дням (последние 7 дней)
+        cur.execute(f"""
+            SELECT DATE(fetched_at) as day,
+                   COUNT(*) as total,
+                   COUNT(CASE WHEN sentiment='positive' THEN 1 END) as positive,
+                   COUNT(CASE WHEN sentiment='negative' THEN 1 END) as negative
+            FROM {SCHEMA}.comments
+            WHERE fetched_at >= CURRENT_DATE - INTERVAL '6 days'
+            GROUP BY day ORDER BY day
+        """)
+        days_data = [
+            {"day": str(r[0]), "total": r[1], "positive": r[2], "negative": r[3]}
+            for r in cur.fetchall()
+        ]
+
+        conn.close()
+        return {"statusCode": 200, "headers": CORS, "body": json.dumps({
+            "groups_rating": groups_rating,
+            "days_data": days_data,
+        }, ensure_ascii=False)}
+
     # POST ?action=fetch — запустить сбор
     post_params = event.get("queryStringParameters") or {}
     if method == "POST" and (post_params.get("action") == "fetch" or path.endswith("/fetch")):
