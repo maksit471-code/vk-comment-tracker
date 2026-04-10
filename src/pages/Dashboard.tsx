@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import Icon from '@/components/ui/icon';
 
 const COMMENTS_API = 'https://functions.poehali.dev/1ba8f77d-759f-4bd4-bfc3-bd43b661451d';
@@ -36,7 +37,7 @@ function HitsModal({ onClose, action, title }: { onClose: () => void; action: st
       .finally(() => setLoading(false));
   }, [action]);
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
@@ -107,7 +108,8 @@ function HitsModal({ onClose, action, title }: { onClose: () => void; action: st
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
