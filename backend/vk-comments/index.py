@@ -218,6 +218,32 @@ def handler(event: dict, context) -> dict:
         ]
         return {"statusCode": 200, "headers": CORS, "body": json.dumps(result, ensure_ascii=False)}
 
+    # GET ?action=negative — негативные комментарии
+    if method == "GET" and params_early.get("action") == "negative":
+        conn = get_conn()
+        cur = conn.cursor()
+        cur.execute(f"""
+            SELECT c.id, c.author_id, c.author_name, c.author_photo, c.text,
+                   c.published_at, g.name as group_name, c.vk_post_id, c.vk_comment_id,
+                   g.vk_id as group_vk_id
+            FROM {SCHEMA}.comments c
+            JOIN {SCHEMA}.groups g ON g.id = c.group_id
+            WHERE c.sentiment = 'negative'
+            ORDER BY c.fetched_at DESC
+            LIMIT 100
+        """)
+        rows = cur.fetchall()
+        conn.close()
+        result = [
+            {
+                "id": r[0], "author_id": r[1], "author_name": r[2], "author_photo": r[3],
+                "text": r[4], "published_at": r[5].isoformat() if r[5] else None,
+                "group_name": r[6], "vk_post_id": r[7], "vk_comment_id": r[8], "group_vk_id": r[9],
+            }
+            for r in rows
+        ]
+        return {"statusCode": 200, "headers": CORS, "body": json.dumps(result, ensure_ascii=False)}
+
     # GET ?action=analytics — рейтинг групп и активность по дням
     if method == "GET" and params_early.get("action") == "analytics":
         conn = get_conn()

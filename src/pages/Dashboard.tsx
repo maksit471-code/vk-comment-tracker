@@ -25,16 +25,16 @@ interface HitComment {
   group_vk_id: number;
 }
 
-function HitsModal({ onClose }: { onClose: () => void }) {
+function HitsModal({ onClose, action, title }: { onClose: () => void; action: string; title: string }) {
   const [hits, setHits] = useState<HitComment[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`${COMMENTS_API}?action=keyword_hits`)
+    fetch(`${COMMENTS_API}?action=${action}`)
       .then(r => r.json())
       .then(d => setHits(Array.isArray(d) ? d : []))
       .finally(() => setLoading(false));
-  }, []);
+  }, [action]);
 
   return (
     <div
@@ -44,7 +44,7 @@ function HitsModal({ onClose }: { onClose: () => void }) {
       <div className="bg-card border border-border rounded-xl w-full max-w-lg max-h-[80vh] flex flex-col shadow-2xl">
         <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
           <div>
-            <h2 className="text-sm font-semibold">Совпадения за сегодня</h2>
+            <h2 className="text-sm font-semibold">{title}</h2>
             {!loading && <p className="text-xs text-muted-foreground mt-0.5">{hits.length} комментариев</p>}
           </div>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
@@ -114,7 +114,7 @@ function HitsModal({ onClose }: { onClose: () => void }) {
 export default function Dashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [showHits, setShowHits] = useState(false);
+  const [modal, setModal] = useState<{ action: string; title: string } | null>(null);
 
   useEffect(() => {
     fetch(`${COMMENTS_API}?action=stats`)
@@ -135,30 +135,38 @@ export default function Dashboard() {
       value: loading ? '...' : String(stats?.today_count ?? '—'),
       icon: 'MessageSquare',
       clickable: false,
+      action: '',
+      modalTitle: '',
     },
     {
       label: 'Совпадений сегодня',
       value: loading ? '...' : String(stats?.keyword_hits_today ?? '—'),
       icon: 'AtSign',
       clickable: true,
+      action: 'keyword_hits',
+      modalTitle: 'Совпадения за сегодня',
     },
     {
       label: 'Негативных',
       value: loading ? '...' : String(stats?.negative_count ?? '—'),
       icon: 'AlertTriangle',
-      clickable: false,
+      clickable: true,
+      action: 'negative',
+      modalTitle: 'Негативные комментарии',
     },
     {
       label: 'Групп отслеживается',
       value: loading ? '...' : String(stats?.active_groups ?? '—'),
       icon: 'Users',
       clickable: false,
+      action: '',
+      modalTitle: '',
     },
   ];
 
   return (
     <div className="space-y-8 animate-fade-in">
-      {showHits && <HitsModal onClose={() => setShowHits(false)} />}
+      {modal && <HitsModal onClose={() => setModal(null)} action={modal.action} title={modal.title} />}
 
       <div>
         <div className="flex items-center gap-2 mb-1">
@@ -181,7 +189,7 @@ export default function Dashboard() {
             key={i}
             className={`bg-card border border-border rounded-lg p-5 flex flex-col gap-3 transition-colors ${s.clickable ? 'cursor-pointer hover:border-foreground/40' : ''}`}
             style={{ animationDelay: `${i * 60}ms` }}
-            onClick={() => s.clickable && setShowHits(true)}
+            onClick={() => s.clickable && setModal({ action: s.action, title: s.modalTitle })}
           >
             <div className="flex items-start justify-between">
               <span className="text-xs text-muted-foreground font-medium leading-tight">{s.label}</span>
