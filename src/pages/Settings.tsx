@@ -121,9 +121,7 @@ export default function Settings() {
         </div>
         <div className="px-6 py-5 space-y-4">
           <div className="flex items-center gap-4 pb-4 border-b border-border">
-            <div className="w-14 h-14 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-lg font-semibold font-mono">
-              ИП
-            </div>
+            <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/f/f9/Coat_of_arms_of_Russia.svg/200px-Coat_of_arms_of_Russia.svg.png" alt="Герб России" className="w-14 h-14 rounded-full object-contain bg-white p-1" />
             <div>
               <p className="font-medium">{name}</p>
               <p className="text-sm text-muted-foreground">{email}</p>
