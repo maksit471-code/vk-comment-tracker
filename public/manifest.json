@@ -1,0 +1,24 @@
+{
+  "name": "Комментарий — мониторинг упоминаний",
+  "short_name": "Комментарий",
+  "description": "Мониторинг комментариев ВКонтакте по ключевым словам",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f7f7f7",
+  "theme_color": "#141414",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "https://cdn.poehali.dev/projects/05a79ea6-0695-4b3e-bf15-8fb9329dd7d1/files/e4265540-5630-4da7-8787-4c5509560d94.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://cdn.poehali.dev/projects/05a79ea6-0695-4b3e-bf15-8fb9329dd7d1/files/e4265540-5630-4da7-8787-4c5509560d94.jpg",
+      "sizes": "192x192",
+      "type": "image/jpeg",
+      "purpose": "any"
+    }
+  ]
+}
