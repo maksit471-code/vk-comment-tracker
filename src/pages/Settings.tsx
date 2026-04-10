@@ -121,7 +121,7 @@ export default function Settings() {
         </div>
         <div className="px-6 py-5 space-y-4">
           <div className="flex items-center gap-4 pb-4 border-b border-border">
-            <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/f/f9/Coat_of_arms_of_Russia.svg/200px-Coat_of_arms_of_Russia.svg.png" alt="Герб России" className="w-14 h-14 rounded-full object-contain bg-white p-1" />
+            <img src="https://cdn.poehali.dev/projects/05a79ea6-0695-4b3e-bf15-8fb9329dd7d1/files/4f26eb43-ea1c-4d59-91f7-294de9e143bd.jpg" alt="Герб России" className="w-14 h-14 rounded-full object-cover" />
             <div>
               <p className="font-medium">{name}</p>
               <p className="text-sm text-muted-foreground">{email}</p>
