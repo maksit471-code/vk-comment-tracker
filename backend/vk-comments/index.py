@@ -121,7 +121,9 @@ def fetch_comments_for_group(conn, group_id: int, vk_id: int, screen_name: str, 
                 new_comments.append({
                     "text": text,
                     "author_name": author_name,
+                    "author_id": author_id,
                     "group_id": group_id,
+                    "group_vk_id": vk_id,
                     "vk_post_id": post_id,
                     "vk_comment_id": c["id"],
                 })
@@ -223,7 +225,7 @@ def handler(event: dict, context) -> dict:
             word = matched[0]["word"]
             author_id = c.get("author_id", 0)
             author_name = c.get("author_name") or f"id{author_id}"
-            comment_url = f"https://vk.com/wall-{c['group_id']}_{c['vk_post_id']}?reply={c['vk_comment_id']}"
+            comment_url = f"https://vk.com/wall-{c['group_vk_id']}_{c['vk_post_id']}?reply={c['vk_comment_id']}"
             short_text = c["text"][:500] + ("..." if len(c["text"]) > 500 else "")
             lines = [
                 f"🔔 <b>Ключевое слово: «{word}»</b>",
@@ -431,7 +433,7 @@ def handler(event: dict, context) -> dict:
                     for word, ex in all_hits[:20]:  # не более 20 сообщений за раз
                         author_id = ex.get("author_id", 0)
                         author_name = ex.get("author_name") or f"id{author_id}"
-                        comment_url = f"https://vk.com/wall-{ex['group_id']}_{ex['vk_post_id']}?reply={ex['vk_comment_id']}"
+                        comment_url = f"https://vk.com/wall-{ex.get('group_vk_id', ex['group_id'])}_{ex['vk_post_id']}?reply={ex['vk_comment_id']}"
                         short_text = ex["text"][:500] + ("..." if len(ex["text"]) > 500 else "")
                         lines = [
                             f"🔔 <b>Ключевое слово: «{word}»</b>",
