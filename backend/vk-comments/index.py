@@ -186,12 +186,12 @@ def handler(event: dict, context) -> dict:
         conn = get_conn()
         cur = conn.cursor()
 
-        cur.execute(f"SELECT key, value FROM {SCHEMA}.settings WHERE key IN ('tg_chat_id', 'tg_enabled')")
+        cur.execute(f"SELECT key, value FROM {SCHEMA}.settings WHERE key LIKE 'tg_%'")
         settings = {r[0]: r[1] for r in cur.fetchall()}
-        tg_chat_id = settings.get("tg_chat_id")
         tg_enabled = settings.get("tg_enabled") == "true"
+        tg_chat_ids = [v for k, v in settings.items() if k.startswith("tg_chat_id") and v]
 
-        if not tg_enabled or not tg_chat_id:
+        if not tg_enabled or not tg_chat_ids:
             conn.close()
             return {"statusCode": 400, "headers": CORS, "body": json.dumps({"error": "Telegram не настроен"})}
 
@@ -238,7 +238,8 @@ def handler(event: dict, context) -> dict:
                 f"📄 <b>Текст:</b>",
                 f"<i>{short_text}</i>",
             ]
-            tg_send(tg_chat_id, "\n".join(lines))
+            for cid in tg_chat_ids:
+                tg_send(cid, "\n".join(lines))
             sent += 1
             if sent >= 3:
                 break
@@ -374,11 +375,13 @@ def handler(event: dict, context) -> dict:
         keywords = [{"id": r[0], "word": r[1]} for r in cur.fetchall()]
 
         # Загружаем настройки Telegram
-        cur.execute(f"SELECT key, value FROM {SCHEMA}.settings WHERE key IN ('tg_chat_id', 'tg_enabled', 'min_mentions')")
+        cur.execute(f"SELECT key, value FROM {SCHEMA}.settings WHERE key LIKE 'tg_%' OR key = 'min_mentions'")
         settings = {r[0]: r[1] for r in cur.fetchall()}
-        tg_chat_id = settings.get("tg_chat_id")
         tg_enabled = settings.get("tg_enabled") == "true"
         min_mentions = int(settings.get("min_mentions") or 1)
+        # Собираем все chat_id (tg_chat_id, tg_chat_id_2, tg_chat_id_3 ...)
+        tg_chat_ids = [v for k, v in settings.items() if k.startswith("tg_chat_id") and v]
+        tg_chat_id = tg_chat_ids[0] if tg_chat_ids else None
 
         # Собираем комментарии
         all_new_comments = []
@@ -443,7 +446,8 @@ def handler(event: dict, context) -> dict:
                             f"📄 <b>Текст:</b>",
                             f"<i>{short_text}</i>",
                         ]
-                        tg_send(tg_chat_id, "\n".join(lines))
+                        for cid in tg_chat_ids:
+                            tg_send(cid, "\n".join(lines))
                         alerts_sent += 1
 
         conn.close()

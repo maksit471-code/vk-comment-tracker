@@ -1,0 +1,1 @@
+INSERT INTO t_p94871206_vk_comment_tracker.settings (key, value) VALUES ('tg_chat_id_2', '8637999995');

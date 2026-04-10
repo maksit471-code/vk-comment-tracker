@@ -46,6 +46,23 @@ def handler(event: dict, context) -> dict:
     if method == "OPTIONS":
         return {"statusCode": 200, "headers": CORS, "body": ""}
 
+    # GET /updates — получить последние сообщения боту (для поиска chat_id)
+    if method == "GET":
+        result = tg("getUpdates", {"limit": 20, "offset": -20})
+        updates = result.get("result", [])
+        chats = []
+        for u in updates:
+            msg = u.get("message") or u.get("my_chat_member", {})
+            chat = msg.get("chat", {}) if isinstance(msg, dict) else {}
+            if chat.get("id"):
+                chats.append({
+                    "chat_id": chat["id"],
+                    "username": chat.get("username", ""),
+                    "first_name": chat.get("first_name", ""),
+                    "last_name": chat.get("last_name", ""),
+                })
+        return {"statusCode": 200, "headers": CORS, "body": json.dumps({"updates": chats}, ensure_ascii=False)}
+
     if method != "POST":
         return {"statusCode": 405, "headers": CORS, "body": json.dumps({"error": "Method not allowed"})}
 
