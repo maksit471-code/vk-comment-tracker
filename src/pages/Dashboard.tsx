@@ -168,6 +168,7 @@ export default function Dashboard() {
   return (
     <div className="space-y-8 animate-fade-in">
       {modal && <HitsModal onClose={() => setModal(null)} action={modal.action} title={modal.title} />}
+      <button type="button" style={{position:'fixed',bottom:20,right:20,zIndex:99999,background:'red',color:'white',padding:'12px 20px',borderRadius:8,fontSize:16}} onClick={() => alert('клик работает')}>TEST</button>
 
       <div>
         <div className="flex items-center gap-2 mb-1">
