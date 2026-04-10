@@ -1,0 +1,1 @@
+INSERT INTO t_p94871206_vk_comment_tracker.keywords (word, active) VALUES ('сирена', TRUE);

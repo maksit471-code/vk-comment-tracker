@@ -181,6 +181,70 @@ def handler(event: dict, context) -> dict:
             "keyword_hits_today": keyword_hits_today,
         })}
 
+    # POST ?action=test_notify — отправить тестовое уведомление по уже собранным совпадениям
+    if method in ("POST", "GET") and params_early.get("action") == "test_notify":
+        conn = get_conn()
+        cur = conn.cursor()
+
+        cur.execute(f"SELECT key, value FROM {SCHEMA}.settings WHERE key IN ('tg_chat_id', 'tg_enabled')")
+        settings = {r[0]: r[1] for r in cur.fetchall()}
+        tg_chat_id = settings.get("tg_chat_id")
+        tg_enabled = settings.get("tg_enabled") == "true"
+
+        if not tg_enabled or not tg_chat_id:
+            conn.close()
+            return {"statusCode": 400, "headers": CORS, "body": json.dumps({"error": "Telegram не настроен"})}
+
+        cur.execute(f"SELECT id, word FROM {SCHEMA}.keywords WHERE active = TRUE")
+        keywords = [{"id": r[0], "word": r[1]} for r in cur.fetchall()]
+
+        if not keywords:
+            conn.close()
+            return {"statusCode": 400, "headers": CORS, "body": json.dumps({"error": "Нет активных ключевых слов"})}
+
+        cur.execute(f"""
+            SELECT c.id, c.author_id, c.author_name, c.text, c.vk_post_id, c.vk_comment_id,
+                   g.name, g.vk_id, c.group_id
+            FROM {SCHEMA}.comments c
+            JOIN {SCHEMA}.groups g ON g.id = c.group_id
+            ORDER BY c.fetched_at DESC LIMIT 500
+        """)
+        rows = cur.fetchall()
+        conn.close()
+
+        sent = 0
+        for r in rows:
+            c = {"id": r[0], "author_id": r[1], "author_name": r[2], "text": r[3],
+                 "vk_post_id": r[4], "vk_comment_id": r[5], "group_name": r[6],
+                 "group_vk_id": r[7], "group_id": r[8]}
+            matched = check_keywords(c["text"], keywords)
+            if not matched:
+                continue
+            word = matched[0]["word"]
+            author_id = c.get("author_id", 0)
+            author_name = c.get("author_name") or f"id{author_id}"
+            comment_url = f"https://vk.com/wall-{c['group_id']}_{c['vk_post_id']}?reply={c['vk_comment_id']}"
+            short_text = c["text"][:500] + ("..." if len(c["text"]) > 500 else "")
+            lines = [
+                f"🔔 <b>Ключевое слово: «{word}»</b>",
+                f"",
+                f"👤 <b>ID:</b> {author_id}",
+                f"🔗 <b>Профиль:</b> https://vk.com/id{author_id}",
+                f"📛 <b>ФИО:</b> {author_name}",
+                f"",
+                f"💬 <b>Ссылка на комментарий:</b>",
+                comment_url,
+                f"",
+                f"📄 <b>Текст:</b>",
+                f"<i>{short_text}</i>",
+            ]
+            tg_send(tg_chat_id, "\n".join(lines))
+            sent += 1
+            if sent >= 3:
+                break
+
+        return {"statusCode": 200, "headers": CORS, "body": json.dumps({"ok": True, "sent": sent})}
+
     # GET ?action=keyword_hits — комментарии-совпадения за сегодня
     if method == "GET" and params_early.get("action") == "keyword_hits":
         conn = get_conn()
