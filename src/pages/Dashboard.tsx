@@ -40,7 +40,6 @@ function HitsModal({ onClose, action, title }: { onClose: () => void; action: st
   return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div className="bg-card border border-border rounded-xl w-full max-w-lg max-h-[80vh] flex flex-col shadow-2xl">
         <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
@@ -209,7 +208,7 @@ export default function Dashboard() {
               type="button"
               className="bg-card border border-border rounded-lg p-5 flex flex-col gap-3 transition-colors cursor-pointer hover:border-foreground/40 text-left w-full"
               style={{ animationDelay: `${i * 60}ms` }}
-              onClick={() => setModal({ action: s.action, title: s.modalTitle })}
+              onClick={() => setTimeout(() => setModal({ action: s.action, title: s.modalTitle }), 10)}
             >
               {inner}
             </button>
