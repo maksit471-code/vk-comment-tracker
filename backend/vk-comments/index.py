@@ -57,6 +57,29 @@ def tg_send(chat_id, text: str):
         pass
 
 
+def tg_send_with_screenshot(chat_id, text: str, comment_url: str):
+    if not TG_TOKEN or not chat_id:
+        return
+    screenshot_url = f"https://mini.s-shot.ru/1200x800/PNG/1200/Z100/?{urllib.parse.quote(comment_url, safe='')}"
+    url = f"https://api.telegram.org/bot{TG_TOKEN}/sendPhoto"
+    caption = text[:1024]
+    data = json.dumps({
+        "chat_id": chat_id,
+        "photo": screenshot_url,
+        "caption": caption,
+        "parse_mode": "HTML",
+    }).encode()
+    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:
+            result = json.loads(r.read().decode())
+            if result.get("ok"):
+                return result
+    except Exception:
+        pass
+    tg_send(chat_id, text)
+
+
 def check_keywords(text: str, keywords: list) -> list:
     """Возвращает список ключевых слов, найденных в тексте."""
     text_lower = text.lower()
@@ -241,7 +264,7 @@ def handler(event: dict, context) -> dict:
                 f"<i>{short_text}</i>",
             ]
             for cid in tg_chat_ids:
-                tg_send(cid, "\n".join(lines))
+                tg_send_with_screenshot(cid, "\n".join(lines), comment_url)
             sent += 1
             if sent >= 3:
                 break
@@ -449,7 +472,7 @@ def handler(event: dict, context) -> dict:
                             f"<i>{short_text}</i>",
                         ]
                         for cid in tg_chat_ids:
-                            tg_send(cid, "\n".join(lines))
+                            tg_send_with_screenshot(cid, "\n".join(lines), comment_url)
                         alerts_sent += 1
 
         conn.close()
