@@ -387,8 +387,12 @@ def handler(event: dict, context) -> dict:
 
         cur = conn.cursor()
 
-        # Загружаем активные группы
-        cur.execute(f"SELECT id, vk_id, screen_name, name FROM {SCHEMA}.groups WHERE is_active=TRUE")
+        # Если передан конкретный group_id — обрабатываем только его
+        filter_group_id = post_params.get("group_id")
+        if filter_group_id:
+            cur.execute(f"SELECT id, vk_id, screen_name, name FROM {SCHEMA}.groups WHERE is_active=TRUE AND id=%s", (int(filter_group_id),))
+        else:
+            cur.execute(f"SELECT id, vk_id, screen_name, name FROM {SCHEMA}.groups WHERE is_active=TRUE")
         active_groups = cur.fetchall()
 
         if not active_groups:
