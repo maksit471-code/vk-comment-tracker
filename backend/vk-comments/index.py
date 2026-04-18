@@ -86,22 +86,92 @@ def check_keywords(text: str, keywords: list) -> list:
     return [kw for kw in keywords if kw["word"].lower() in text_lower]
 
 
-def fetch_comments_for_group(conn, group_id: int, vk_id: int, screen_name: str, token: str) -> list:
-    """Собирает последние комментарии из постов группы, возвращает список новых."""
-    new_comments = []
+def send_alert(tg_chat_ids: list, kind: str, word: str, group_name: str,
+               group_vk_id: int, vk_post_id: int, author_id: int,
+               author_name: str, text: str, vk_comment_id: int = None):
+    """Формирует и отправляет уведомление в Telegram немедленно."""
+    if not tg_chat_ids:
+        return
+    if vk_comment_id:
+        url = f"https://vk.com/wall-{group_vk_id}_{vk_post_id}?reply={vk_comment_id}"
+        type_label = "💬 Комментарий"
+    else:
+        url = f"https://vk.com/wall-{group_vk_id}_{vk_post_id}"
+        type_label = "📰 Пост"
+    short_text = text[:500] + ("..." if len(text) > 500 else "")
+    lines = [
+        f"🔔 <b>Ключевое слово: «{word}»</b>  |  {type_label}",
+        f"📢 <b>Группа:</b> {group_name}",
+        f"",
+        f"👤 <b>Автор:</b> <a href=\"https://vk.com/id{author_id}\">{author_name}</a>",
+        f"",
+        f"📄 <b>Текст:</b>",
+        f"<i>{short_text}</i>",
+        f"",
+        f"🔗 {url}",
+    ]
+    msg = "\n".join(lines)
+    for cid in tg_chat_ids:
+        tg_send(cid, msg)
 
-    # Получаем последние 5 постов (меньше запросов — быстрее)
-    wall = vk_request("wall.get", {"owner_id": f"-{vk_id}", "count": 5, "fields": "id"}, token)
+
+def fetch_and_notify(conn, group_id: int, vk_id: int, group_name: str, token: str,
+                     keywords: list, tg_enabled: bool, tg_chat_ids: list) -> dict:
+    """Собирает новые посты и комментарии, сразу отправляет уведомления при совпадении ключевых слов."""
+    new_posts = 0
+    new_comments = 0
+    alerts = 0
+    cur = conn.cursor()
+
+    # --- Получаем последние 5 постов ---
+    wall = vk_request("wall.get", {"owner_id": f"-{vk_id}", "count": 5}, token)
     posts = wall.get("response", {}).get("items", [])
 
     for post in posts:
         post_id = post["id"]
+        post_text = post.get("text", "").strip()
+        post_author = post.get("from_id") or post.get("signer_id") or 0
+        post_date = post.get("date")
+
+        # --- Сохраняем пост (только новые) ---
+        cur.execute(
+            f"""
+            INSERT INTO {SCHEMA}.posts (group_id, vk_post_id, text, author_id, published_at)
+            VALUES (%s, %s, %s, %s, to_timestamp(%s))
+            ON CONFLICT (group_id, vk_post_id) DO NOTHING
+            RETURNING id
+            """,
+            (group_id, post_id, post_text, post_author, post_date)
+        )
+        is_new_post = bool(cur.rowcount)
+        conn.commit()
+
+        if is_new_post:
+            new_posts += 1
+            # --- Сразу проверяем ключевые слова в тексте поста ---
+            if post_text and keywords and tg_enabled:
+                matched = check_keywords(post_text, keywords)
+                for kw in matched:
+                    send_alert(
+                        tg_chat_ids, "post", kw["word"], group_name,
+                        vk_id, post_id, abs(post_author), f"vk.com/club{vk_id}",
+                        post_text
+                    )
+                    alerts += 1
+                    cur.execute(
+                        f"UPDATE {SCHEMA}.keywords SET hits = hits + 1 WHERE id = %s",
+                        (kw["id"],)
+                    )
+                conn.commit()
+
+        # --- Получаем комментарии к посту ---
         cdata = vk_request("wall.getComments", {
             "owner_id": f"-{vk_id}",
             "post_id": post_id,
             "count": 100,
             "fields": "photo_50",
             "extended": 1,
+            "sort": "desc",
         }, token)
         comments = cdata.get("response", {}).get("items", [])
         profiles = {p["id"]: p for p in cdata.get("response", {}).get("profiles", [])}
@@ -117,7 +187,6 @@ def fetch_comments_for_group(conn, group_id: int, vk_id: int, screen_name: str, 
             author_photo = profile.get("photo_50")
             published_at = c.get("date")
 
-            cur = conn.cursor()
             cur.execute(
                 f"""
                 INSERT INTO {SCHEMA}.comments
@@ -128,19 +197,28 @@ def fetch_comments_for_group(conn, group_id: int, vk_id: int, screen_name: str, 
                 """,
                 (group_id, post_id, c["id"], author_id, author_name, author_photo, text, published_at)
             )
-            if cur.rowcount:
-                new_comments.append({
-                    "text": text,
-                    "author_name": author_name,
-                    "author_id": author_id,
-                    "group_id": group_id,
-                    "group_vk_id": vk_id,
-                    "vk_post_id": post_id,
-                    "vk_comment_id": c["id"],
-                })
-        conn.commit()
+            is_new = bool(cur.rowcount)
+            conn.commit()
 
-    return new_comments
+            if is_new:
+                new_comments += 1
+                # --- Сразу проверяем ключевые слова в комментарии ---
+                if keywords and tg_enabled:
+                    matched = check_keywords(text, keywords)
+                    for kw in matched:
+                        send_alert(
+                            tg_chat_ids, "comment", kw["word"], group_name,
+                            vk_id, post_id, author_id, author_name,
+                            text, c["id"]
+                        )
+                        alerts += 1
+                        cur.execute(
+                            f"UPDATE {SCHEMA}.keywords SET hits = hits + 1 WHERE id = %s",
+                            (kw["id"],)
+                        )
+                    conn.commit()
+
+    return {"new_posts": new_posts, "new_comments": new_comments, "alerts": alerts}
 
 
 def handler(event: dict, context) -> dict:
@@ -392,87 +470,34 @@ def handler(event: dict, context) -> dict:
         keywords = [{"id": r[0], "word": r[1]} for r in cur.fetchall()]
 
         # Загружаем настройки Telegram
-        cur.execute(f"SELECT key, value FROM {SCHEMA}.settings WHERE key LIKE 'tg_%' OR key = 'min_mentions'")
+        cur.execute(f"SELECT key, value FROM {SCHEMA}.settings WHERE key LIKE 'tg_%'")
         settings = {r[0]: r[1] for r in cur.fetchall()}
         tg_enabled = settings.get("tg_enabled") == "true"
-        min_mentions = int(settings.get("min_mentions") or 1)
-        # Собираем все chat_id (tg_chat_id, tg_chat_id_2, tg_chat_id_3 ...)
         tg_chat_ids = [v for k, v in settings.items() if k.startswith("tg_chat_id") and v]
-        tg_chat_id = tg_chat_ids[0] if tg_chat_ids else None
 
-        # Собираем комментарии
-        all_new_comments = []
+        # Собираем посты и комментарии, уведомления отправляются сразу при нахождении
+        total_posts = 0
+        total_comments = 0
+        total_alerts = 0
         for (group_id, vk_id, screen_name, group_name) in active_groups:
             try:
-                new = fetch_comments_for_group(conn, group_id, vk_id, screen_name, vk_token)
-                for c in new:
-                    c["group_name"] = group_name
-                all_new_comments.extend(new)
-            except Exception:
-                pass
-
-        # Проверяем ключевые слова
-        alerts_sent = 0
-        if keywords and all_new_comments:
-            keyword_hits = {}  # word -> list of comments
-
-            for comment in all_new_comments:
-                matched = check_keywords(comment["text"], keywords)
-                for kw in matched:
-                    if kw["word"] not in keyword_hits:
-                        keyword_hits[kw["word"]] = []
-                    keyword_hits[kw["word"]].append(comment)
-
-            # Обновляем счётчики hits
-            for kw in keywords:
-                count = len(keyword_hits.get(kw["word"], []))
-                if count > 0:
-                    cur.execute(
-                        f"UPDATE {SCHEMA}.keywords SET hits = hits + %s WHERE id = %s",
-                        (count, kw["id"])
-                    )
-            conn.commit()
-
-            # Отправляем Telegram-уведомления
-            if tg_enabled and tg_chat_id:
-                # Собираем все уникальные комментарии-совпадения
-                seen_ids = set()
-                all_hits = []
-                for word, comments in keyword_hits.items():
-                    for c in comments:
-                        if c["vk_comment_id"] not in seen_ids:
-                            seen_ids.add(c["vk_comment_id"])
-                            all_hits.append((word, c))
-
-                if len(all_hits) >= min_mentions:
-                    for word, ex in all_hits[:20]:  # не более 20 сообщений за раз
-                        author_id = ex.get("author_id", 0)
-                        author_name = ex.get("author_name") or f"id{author_id}"
-                        comment_url = f"https://vk.com/wall-{ex.get('group_vk_id', ex['group_id'])}_{ex['vk_post_id']}?reply={ex['vk_comment_id']}"
-                        short_text = ex["text"][:500] + ("..." if len(ex["text"]) > 500 else "")
-                        lines = [
-                            f"🔔 <b>Ключевое слово: «{word}»</b>",
-                            f"",
-                            f"👤 <b>ID:</b> {author_id}",
-                            f"🔗 <b>Профиль:</b> https://vk.com/id{author_id}",
-                            f"📛 <b>ФИО:</b> {author_name}",
-                            f"",
-                            f"💬 <b>Ссылка на комментарий:</b>",
-                            comment_url,
-                            f"",
-                            f"📄 <b>Текст:</b>",
-                            f"<i>{short_text}</i>",
-                        ]
-                        for cid in tg_chat_ids:
-                            tg_send_with_screenshot(cid, "\n".join(lines), comment_url)
-                        alerts_sent += 1
+                result = fetch_and_notify(
+                    conn, group_id, vk_id, group_name, vk_token,
+                    keywords, tg_enabled, tg_chat_ids
+                )
+                total_posts += result["new_posts"]
+                total_comments += result["new_comments"]
+                total_alerts += result["alerts"]
+            except Exception as e:
+                print(f"ERROR group {group_id}: {e}")
 
         conn.close()
         return {"statusCode": 200, "headers": CORS, "body": json.dumps({
             "ok": True,
-            "fetched": len(all_new_comments),
+            "new_posts": total_posts,
+            "new_comments": total_comments,
             "groups": len(active_groups),
-            "alerts": alerts_sent,
+            "alerts": total_alerts,
         })}
 
     # GET / — лента комментариев
