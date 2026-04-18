@@ -7,7 +7,7 @@ import os
 import json
 import urllib.request
 import psycopg2
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 
 SCHEMA = os.environ.get("MAIN_DB_SCHEMA", "t_p94871206_vk_comment_tracker")
 FETCH_URL = "https://functions.poehali.dev/1ba8f77d-759f-4bd4-bfc3-bd43b661451d"
@@ -23,20 +23,21 @@ def get_conn():
     return psycopg2.connect(os.environ["DATABASE_URL"])
 
 
-def fetch_group(group_id: int) -> dict:
-    """Вызывает сбор комментариев для одной группы."""
+def fire_group(group_id: int) -> None:
+    """Запускает fetch для одной группы — fire and forget (не ждёт ответа)."""
     url = f"{FETCH_URL}?action=fetch&group_id={group_id}"
     req = urllib.request.Request(url, data=b"{}", method="POST")
     req.add_header("Content-Type", "application/json")
     try:
-        with urllib.request.urlopen(req, timeout=25) as r:
-            return {"group_id": group_id, "ok": True, "result": json.loads(r.read().decode())}
-    except Exception as e:
-        return {"group_id": group_id, "ok": False, "error": str(e)}
+        # Минимальный таймаут — просто отправляем запрос, не ждём полного ответа
+        with urllib.request.urlopen(req, timeout=3) as r:
+            r.read()
+    except Exception:
+        pass
 
 
 def handler(event: dict, context) -> dict:
-    """Запускает сбор комментариев параллельно по каждой активной группе."""
+    """Запускает сбор комментариев параллельно по каждой активной группе (fire-and-forget)."""
     if event.get("httpMethod") == "OPTIONS":
         return {"statusCode": 200, "headers": CORS, "body": ""}
 
@@ -49,15 +50,12 @@ def handler(event: dict, context) -> dict:
     if not group_ids:
         return {"statusCode": 200, "headers": CORS, "body": json.dumps({"ok": True, "groups": 0})}
 
-    results = []
-    with ThreadPoolExecutor(max_workers=min(len(group_ids), 5)) as executor:
-        futures = {executor.submit(fetch_group, gid): gid for gid in group_ids}
-        for future in as_completed(futures):
-            results.append(future.result())
+    with ThreadPoolExecutor(max_workers=min(len(group_ids), 9)) as executor:
+        for gid in group_ids:
+            executor.submit(fire_group, gid)
 
-    ok_count = sum(1 for r in results if r.get("ok"))
     return {
         "statusCode": 200,
         "headers": CORS,
-        "body": json.dumps({"ok": True, "groups": len(group_ids), "success": ok_count, "results": results}),
+        "body": json.dumps({"ok": True, "groups": len(group_ids), "fired": len(group_ids)}),
     }

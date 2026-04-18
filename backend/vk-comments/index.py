@@ -36,7 +36,7 @@ def vk_request(method: str, params: dict, token: str) -> dict:
     params["access_token"] = token
     params["v"] = VK_VERSION
     url = f"{VK_API}/{method}?" + urllib.parse.urlencode(params)
-    with urllib.request.urlopen(url, timeout=15) as r:
+    with urllib.request.urlopen(url, timeout=7) as r:
         return json.loads(r.read().decode())
 
 
@@ -90,20 +90,8 @@ def fetch_comments_for_group(conn, group_id: int, vk_id: int, screen_name: str, 
     """Собирает последние комментарии из постов группы, возвращает список новых."""
     new_comments = []
 
-    # Обновляем данные группы
-    gdata = vk_request("groups.getById", {"group_id": str(vk_id), "fields": "members_count,photo_200"}, token)
-    groups_list = gdata.get("response", {}).get("groups", [])
-    if groups_list:
-        g = groups_list[0]
-        cur = conn.cursor()
-        cur.execute(
-            f"UPDATE {SCHEMA}.groups SET name=%s, photo_url=%s, members_count=%s WHERE id=%s",
-            (g.get("name"), g.get("photo_200"), g.get("members_count", 0), group_id)
-        )
-        conn.commit()
-
-    # Получаем последние 10 постов
-    wall = vk_request("wall.get", {"owner_id": f"-{vk_id}", "count": 10, "fields": "id"}, token)
+    # Получаем последние 5 постов (меньше запросов — быстрее)
+    wall = vk_request("wall.get", {"owner_id": f"-{vk_id}", "count": 5, "fields": "id"}, token)
     posts = wall.get("response", {}).get("items", [])
 
     for post in posts:
