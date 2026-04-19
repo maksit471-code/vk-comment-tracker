@@ -6,6 +6,7 @@ GET / — получить последние комментарии (query: lim
 
 import os
 import json
+import time
 import psycopg2
 import urllib.request
 import urllib.parse
@@ -32,12 +33,18 @@ CORS = {
 }
 
 
-def vk_request(method: str, params: dict, token: str) -> dict:
+def vk_request(method: str, params: dict, token: str, _retry: int = 0) -> dict:
     params["access_token"] = token
     params["v"] = VK_VERSION
     url = f"{VK_API}/{method}?" + urllib.parse.urlencode(params)
+    time.sleep(0.35)  # не более ~3 запросов/сек к VK API
     with urllib.request.urlopen(url, timeout=7) as r:
-        return json.loads(r.read().decode())
+        data = json.loads(r.read().decode())
+    # VK rate limit error (code 6) — ждём и повторяем один раз
+    if data.get("error", {}).get("error_code") == 6 and _retry == 0:
+        time.sleep(1.5)
+        return vk_request(method, params, token, _retry=1)
+    return data
 
 
 def get_conn():
