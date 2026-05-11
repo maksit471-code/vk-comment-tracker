@@ -559,4 +559,25 @@ def handler(event: dict, context) -> dict:
         ]
         return {"statusCode": 200, "headers": CORS, "body": json.dumps(comments, ensure_ascii=False)}
 
+    # POST ?action=cleanup — удалить старые данные старше N дней
+    if method == "POST" and params_early.get("action") == "cleanup":
+        days = int(params_early.get("days", 14))
+        conn = get_conn()
+        cur = conn.cursor()
+        cur.execute(
+            f"DELETE FROM {SCHEMA}.comments WHERE fetched_at < NOW() - INTERVAL '{days} days'"
+        )
+        deleted_comments = cur.rowcount
+        cur.execute(
+            f"DELETE FROM {SCHEMA}.posts WHERE fetched_at < NOW() - INTERVAL '{days} days'"
+        )
+        deleted_posts = cur.rowcount
+        conn.commit()
+        conn.close()
+        return {"statusCode": 200, "headers": CORS, "body": json.dumps({
+            "ok": True,
+            "deleted_comments": deleted_comments,
+            "deleted_posts": deleted_posts,
+        })}
+
     return {"statusCode": 405, "headers": CORS, "body": json.dumps({"error": "Method not allowed"})}
