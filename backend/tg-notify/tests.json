@@ -1,11 +1,32 @@
 {
   "tests": [
     {
-      "name": "GET bot status",
+      "name": "GET updates",
       "method": "GET",
       "path": "/",
-      "expectedStatus": 405,
+      "expectedStatus": 200
+    },
+    {
+      "name": "GET groups list",
+      "method": "GET",
+      "path": "/?action=groups_list",
+      "expectedStatus": 200,
+      "expectedBody": "[]",
       "bodyMatcher": "partial"
+    },
+    {
+      "name": "GET messages",
+      "method": "GET",
+      "path": "/?action=messages",
+      "expectedStatus": 200,
+      "expectedBody": "[]",
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "GET messages stats",
+      "method": "GET",
+      "path": "/?action=messages_stats",
+      "expectedStatus": 200
     }
   ]
 }

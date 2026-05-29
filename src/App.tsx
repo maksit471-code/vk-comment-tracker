@@ -8,8 +8,10 @@ import Analytics from '@/pages/Analytics';
 import Notifications from '@/pages/Notifications';
 import Settings from '@/pages/Settings';
 import Groups from '@/pages/Groups';
+import TgGroups from '@/pages/TgGroups';
 
 const FETCH_URL = 'https://functions.poehali.dev/1ba8f77d-759f-4bd4-bfc3-bd43b661451d';
+const TG_FETCH_URL = 'https://functions.poehali.dev/5dcabbf3-158f-46c1-af6b-667245e03b9b';
 
 function useAutoFetch() {
   const [lastRun, setLastRun] = useState<Date | null>(() => {
@@ -25,7 +27,14 @@ function useAutoFetch() {
     runningRef.current = true;
     setRunning(true);
     try {
-      await fetch(`${FETCH_URL}?action=fetch`, { method: 'POST' });
+      await Promise.all([
+        fetch(`${FETCH_URL}?action=fetch`, { method: 'POST' }),
+        fetch(TG_FETCH_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'fetch' }),
+        }),
+      ]);
       const now = new Date();
       setLastRun(now);
       localStorage.setItem('monitor_last_run', now.toISOString());
@@ -65,11 +74,12 @@ function useAutoFetch() {
   return { lastRun, running };
 }
 
-type Page = 'dashboard' | 'monitor' | 'analytics' | 'notifications' | 'settings' | 'groups';
+type Page = 'dashboard' | 'monitor' | 'analytics' | 'notifications' | 'settings' | 'groups' | 'tg-groups';
 
 const nav: { id: Page; label: string; icon: string; badge?: string }[] = [
   { id: 'dashboard', label: 'Главная', icon: 'LayoutDashboard' },
   { id: 'groups', label: 'Группы ВК', icon: 'Users' },
+  { id: 'tg-groups', label: 'Группы TG', icon: 'Send' },
   { id: 'monitor', label: 'Мониторинг', icon: 'Activity', badge: 'Live' },
   { id: 'analytics', label: 'Аналитика', icon: 'BarChart2' },
   { id: 'notifications', label: 'Уведомления', icon: 'Bell' },
@@ -89,6 +99,7 @@ function AppContent() {
       case 'notifications': return <Notifications />;
       case 'settings': return <Settings />;
       case 'groups': return <Groups />;
+      case 'tg-groups': return <TgGroups />;
     }
   };
 
