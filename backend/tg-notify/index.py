@@ -41,15 +41,8 @@ def tg(method: str, params: dict = {}) -> dict:
     url = f"{TG_API}/bot{BOT_TOKEN}/{method}"
     data = json.dumps(params).encode()
     req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
-    try:
-        with urllib.request.urlopen(req, timeout=10) as r:
-            return json.loads(r.read().decode())
-    except urllib.error.HTTPError as e:
-        body = e.read().decode()
-        try:
-            return json.loads(body)
-        except Exception:
-            return {"ok": False, "description": f"HTTP {e.code}"}
+    with urllib.request.urlopen(req, timeout=10) as r:
+        return json.loads(r.read().decode())
 
 
 def send_message(chat_id, text: str) -> dict:
@@ -277,6 +270,10 @@ def handler(event: dict, context) -> dict:
         cur.execute(f"SELECT id, tg_id, title FROM {SCHEMA}.tg_groups WHERE is_active=TRUE")
         groups = cur.fetchall()
 
+        if not groups:
+            conn.close()
+            return {"statusCode": 200, "headers": CORS, "body": json.dumps({"ok": True, "saved": 0, "alerts": 0})}
+
         cur.execute(f"SELECT id, word FROM {SCHEMA}.keywords WHERE is_active=TRUE")
         keywords = [{"id": r[0], "word": r[1]} for r in cur.fetchall()]
 
@@ -323,30 +320,27 @@ def handler(event: dict, context) -> dict:
             author_username = from_user.get("username") or sender_chat.get("username") or ""
             published_at = datetime.datetime.utcfromtimestamp(date).isoformat()
 
-            try:
-                cur.execute(f"""
-                    INSERT INTO {SCHEMA}.tg_messages
-                        (group_id, tg_message_id, author_id, author_name, author_username, text, published_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (group_id, tg_message_id) DO NOTHING
-                """, (group_db_id, tg_message_id, author_id, author_name, author_username, text, published_at))
-                if cur.rowcount > 0:
-                    total_saved += 1
-                    matched = check_keywords(text, keywords)
-                    if matched and notify_enabled and notify_chat_id:
-                        kw_list = ", ".join(f"<b>{k['word']}</b>" for k in matched)
-                        link = f"https://t.me/{author_username}" if author_username else ""
-                        author_link = f'<a href="{link}">{author_name}</a>' if link else author_name
-                        alert_text = (
-                            f"🔔 <b>Telegram: {group_title}</b>\n\n"
-                            f"👤 {author_link}\n"
-                            f"🔑 Ключевые слова: {kw_list}\n\n"
-                            f"{text[:500]}"
-                        )
-                        send_message(notify_chat_id, alert_text)
-                        total_alerts += 1
-            except Exception as e:
-                print(f"ERROR saving tg message {tg_message_id}: {e}")
+            cur.execute(f"""
+                INSERT INTO {SCHEMA}.tg_messages
+                    (group_id, tg_message_id, author_id, author_name, author_username, text, published_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (group_id, tg_message_id) DO NOTHING
+            """, (group_db_id, tg_message_id, author_id, author_name, author_username, text, published_at))
+            if cur.rowcount > 0:
+                total_saved += 1
+                matched = check_keywords(text, keywords)
+                if matched and notify_enabled and notify_chat_id:
+                    kw_list = ", ".join(f"<b>{k['word']}</b>" for k in matched)
+                    link = f"https://t.me/{author_username}" if author_username else ""
+                    author_link = f'<a href="{link}">{author_name}</a>' if link else author_name
+                    alert_text = (
+                        f"🔔 <b>Telegram: {group_title}</b>\n\n"
+                        f"👤 {author_link}\n"
+                        f"🔑 Ключевые слова: {kw_list}\n\n"
+                        f"{text[:500]}"
+                    )
+                    send_message(notify_chat_id, alert_text)
+                    total_alerts += 1
 
         conn.commit()
         conn.close()
