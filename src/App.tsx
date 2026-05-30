@@ -22,28 +22,27 @@ function useAutoFetch() {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const runningRef = useRef(false);
 
-  const runFetch = useCallback(async () => {
+  const runFetch = useCallback(() => {
     if (runningRef.current) return;
     runningRef.current = true;
     setRunning(true);
-    try {
-      await Promise.all([
-        fetch(`${FETCH_URL}?action=fetch`, { method: 'POST' }),
-        fetch(TG_FETCH_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'fetch' }),
-        }),
-      ]);
-      const now = new Date();
-      setLastRun(now);
-      localStorage.setItem('monitor_last_run', now.toISOString());
-    } catch {
-      // silent
-    } finally {
+
+    const now = new Date();
+    setLastRun(now);
+    localStorage.setItem('monitor_last_run', now.toISOString());
+
+    // fire-and-forget — не ждём ответа, чтобы не блокировать браузер
+    fetch(`${FETCH_URL}?action=fetch`, { method: 'POST' }).catch(() => {});
+    fetch(TG_FETCH_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'fetch' }),
+    }).catch(() => {});
+
+    setTimeout(() => {
       runningRef.current = false;
       setRunning(false);
-    }
+    }, 3000);
   }, []);
 
   useEffect(() => {
