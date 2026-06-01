@@ -43,24 +43,28 @@ export default function Groups() {
   const [fetchResult, setFetchResult] = useState<{ fetched: number; groups: number } | null>(null);
   const [fetchError, setFetchError] = useState('');
 
-  const loadGroups = useCallback(async () => {
+  const loadGroups = useCallback(async (attempt = 0) => {
     setLoading(true);
-    const res = await fetch(API_URL);
-    const data = JSON.parse(await res.json ? res.json() : res.text());
-    setGroups(Array.isArray(data) ? data : JSON.parse(data));
-    setLoading(false);
+    setError('');
+    try {
+      const res = await fetch(API_URL);
+      const text = await res.text();
+      const data = JSON.parse(text);
+      setGroups(Array.isArray(data) ? data : []);
+    } catch {
+      if (attempt < 3) {
+        setTimeout(() => loadGroups(attempt + 1), 1500);
+        return;
+      }
+      setError('Не удалось загрузить группы');
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
-    fetch(API_URL)
-      .then(r => r.text())
-      .then(text => {
-        const data = JSON.parse(text);
-        setGroups(Array.isArray(data) ? data : []);
-      })
-      .catch(() => setError('Не удалось загрузить группы'))
-      .finally(() => setLoading(false));
-  }, []);
+    loadGroups();
+  }, [loadGroups]);
 
   const searchGroups = async () => {
     if (!query.trim()) return;
