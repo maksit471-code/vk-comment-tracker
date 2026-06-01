@@ -130,32 +130,44 @@ def fetch_and_notify(conn, group_id: int, vk_id: int, group_name: str, token: st
     alerts = 0
     cur = conn.cursor()
 
-    # --- Получаем последние 5 постов ---
-    wall = vk_request("wall.get", {"owner_id": f"-{vk_id}", "count": 5}, token)
+    # --- Получаем последние 3 поста ---
+    wall = vk_request("wall.get", {"owner_id": f"-{vk_id}", "count": 3}, token)
     posts = wall.get("response", {}).get("items", [])
+
+    # --- Узнаём какие посты уже есть в БД ---
+    post_ids = [p["id"] for p in posts]
+    if not post_ids:
+        return {"new_posts": 0, "new_comments": 0, "alerts": 0}
+    cur.execute(
+        f"SELECT vk_post_id FROM {SCHEMA}.posts WHERE group_id=%s AND vk_post_id = ANY(%s)",
+        (group_id, post_ids)
+    )
+    known_post_ids = {row[0] for row in cur.fetchall()}
+
+    import time as _time
+    now_ts = _time.time()
 
     for post in posts:
         post_id = post["id"]
         post_text = post.get("text", "").strip()
         post_author = post.get("from_id") or post.get("signer_id") or 0
         post_date = post.get("date")
+        is_new_post = post_id not in known_post_ids
 
         # --- Сохраняем пост (только новые) ---
-        cur.execute(
-            f"""
-            INSERT INTO {SCHEMA}.posts (group_id, vk_post_id, text, author_id, published_at)
-            VALUES (%s, %s, %s, %s, to_timestamp(%s))
-            ON CONFLICT (group_id, vk_post_id) DO NOTHING
-            RETURNING id
-            """,
-            (group_id, post_id, post_text, post_author, post_date)
-        )
-        is_new_post = bool(cur.rowcount)
-        conn.commit()
-
         if is_new_post:
+            cur.execute(
+                f"""
+                INSERT INTO {SCHEMA}.posts (group_id, vk_post_id, text, author_id, published_at)
+                VALUES (%s, %s, %s, %s, to_timestamp(%s))
+                ON CONFLICT (group_id, vk_post_id) DO NOTHING
+                RETURNING id
+                """,
+                (group_id, post_id, post_text, post_author, post_date)
+            )
+            conn.commit()
             new_posts += 1
-            # --- Сразу проверяем ключевые слова в тексте поста ---
+            # --- Проверяем ключевые слова в тексте поста ---
             if post_text and keywords and tg_enabled:
                 matched = check_keywords(post_text, keywords)
                 for kw in matched:
@@ -170,6 +182,11 @@ def fetch_and_notify(conn, group_id: int, vk_id: int, group_name: str, token: st
                         (kw["id"],)
                     )
                 conn.commit()
+
+        # --- Пропускаем комментарии к старым постам (старше 3 дней) без новизны ---
+        post_age_days = (now_ts - (post_date or 0)) / 86400
+        if not is_new_post and post_age_days > 3:
+            continue
 
         # --- Получаем комментарии к посту ---
         cdata = vk_request("wall.getComments", {

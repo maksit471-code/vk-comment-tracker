@@ -1,7 +1,3 @@
 {
-  "vk-scheduler": "https://functions.poehali.dev/671bd308-55c0-4402-9c64-2b9c38262675",
-  "vk-settings": "https://functions.poehali.dev/ed7f08a0-3361-404a-8c7d-5c5398295948",
-  "tg-notify": "https://functions.poehali.dev/5dcabbf3-158f-46c1-af6b-667245e03b9b",
-  "vk-comments": "https://functions.poehali.dev/1ba8f77d-759f-4bd4-bfc3-bd43b661451d",
-  "vk-groups": "https://functions.poehali.dev/529e9199-86a8-4edf-b41b-2622cfde311b"
+  "vk-comments": "https://functions.poehali.dev/1ba8f77d-759f-4bd4-bfc3-bd43b661451d"
 }
