@@ -274,7 +274,7 @@ def handler(event: dict, context) -> dict:
             conn.close()
             return {"statusCode": 200, "headers": CORS, "body": json.dumps({"ok": True, "saved": 0, "alerts": 0})}
 
-        cur.execute(f"SELECT id, word FROM {SCHEMA}.keywords WHERE is_active=TRUE")
+        cur.execute(f"SELECT id, word FROM {SCHEMA}.keywords WHERE active=TRUE")
         keywords = [{"id": r[0], "word": r[1]} for r in cur.fetchall()]
 
         cur.execute(f"SELECT value FROM {SCHEMA}.settings WHERE key='tg_chat_id'")
