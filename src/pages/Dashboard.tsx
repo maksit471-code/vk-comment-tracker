@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Icon from '@/components/ui/icon';
 
-const COMMENTS_API = 'https://functions.poehali.dev/1ba8f77d-759f-4bd4-bfc3-bd43b661451d';
+const COMMENTS_API = 'https://functions.poehali.dev/17eaf892-d045-4ff2-b295-04bf9d4322e7';
 
 interface Stats {
   today_count: number;

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import Icon from '@/components/ui/icon';
 
-const API = 'https://functions.poehali.dev/ed7f08a0-3361-404a-8c7d-5c5398295948';
+const API = 'https://functions.poehali.dev/70308636-67fb-4fa5-9fe4-2d73f60d74f7';
 
 interface KeywordItem {
   id: number;

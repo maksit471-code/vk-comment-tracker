@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import Icon from '@/components/ui/icon';
 
-const TG_URL = 'https://functions.poehali.dev/5dcabbf3-158f-46c1-af6b-667245e03b9b';
+const TG_URL = 'https://functions.poehali.dev/7855220d-06e9-45ec-ba00-0c98010b29f7';
 
 interface TgGroup {
   id: number;

@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import Icon from '@/components/ui/icon';
 
-const TG_API = 'https://functions.poehali.dev/5dcabbf3-158f-46c1-af6b-667245e03b9b';
-const SETTINGS_API = 'https://functions.poehali.dev/ed7f08a0-3361-404a-8c7d-5c5398295948';
+const TG_API = 'https://functions.poehali.dev/7855220d-06e9-45ec-ba00-0c98010b29f7';
+const SETTINGS_API = 'https://functions.poehali.dev/70308636-67fb-4fa5-9fe4-2d73f60d74f7';
 
 export default function Settings() {
   const [name, setName] = useState('BSF');

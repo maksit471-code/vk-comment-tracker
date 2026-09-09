@@ -10,8 +10,8 @@ import Settings from '@/pages/Settings';
 import Groups from '@/pages/Groups';
 import TgGroups from '@/pages/TgGroups';
 
-const FETCH_URL = 'https://functions.poehali.dev/1ba8f77d-759f-4bd4-bfc3-bd43b661451d';
-const TG_FETCH_URL = 'https://functions.poehali.dev/5dcabbf3-158f-46c1-af6b-667245e03b9b';
+const FETCH_URL = 'https://functions.poehali.dev/17eaf892-d045-4ff2-b295-04bf9d4322e7';
+const TG_FETCH_URL = 'https://functions.poehali.dev/7855220d-06e9-45ec-ba00-0c98010b29f7';
 
 function useAutoFetch() {
   const [lastRun, setLastRun] = useState<Date | null>(() => {

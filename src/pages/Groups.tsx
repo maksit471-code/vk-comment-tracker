@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import Icon from '@/components/ui/icon';
 
-const API_URL = 'https://functions.poehali.dev/529e9199-86a8-4edf-b41b-2622cfde311b';
-const COMMENTS_URL = 'https://functions.poehali.dev/1ba8f77d-759f-4bd4-bfc3-bd43b661451d';
+const API_URL = 'https://functions.poehali.dev/e1929f77-4d55-4e4b-89ba-a4e60aeab7c9';
+const COMMENTS_URL = 'https://functions.poehali.dev/17eaf892-d045-4ff2-b295-04bf9d4322e7';
 
 interface Group {
   id: number;

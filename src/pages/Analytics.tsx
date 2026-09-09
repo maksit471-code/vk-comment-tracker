@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import Icon from '@/components/ui/icon';
 
-const COMMENTS_URL = 'https://functions.poehali.dev/1ba8f77d-759f-4bd4-bfc3-bd43b661451d';
+const COMMENTS_URL = 'https://functions.poehali.dev/17eaf892-d045-4ff2-b295-04bf9d4322e7';
 
 interface GroupRating {
   id: number;
