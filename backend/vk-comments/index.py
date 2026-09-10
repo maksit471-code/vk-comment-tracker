@@ -469,60 +469,82 @@ def handler(event: dict, context) -> dict:
     post_params = event.get("queryStringParameters") or {}
     if method == "POST" and (post_params.get("action") == "fetch" or path.endswith("/fetch")):
         conn = get_conn()
-        vk_token = get_vk_token(conn)
 
-        if not vk_token:
+        # Блокировка: если сбор уже выполняется в другом вызове (например,
+        # запущен из нескольких открытых вкладок браузера одновременно),
+        # не запускаем ещё один — иначе несколько параллельных обходов
+        # всех групп с одним VK-токеном упираются в лимит VK "Flood control"
+        # и сбор комментариев срывается целиком.
+        lock_cur = conn.cursor()
+        lock_cur.execute(
+            f"""
+            UPDATE {SCHEMA}.fetch_lock SET locked_at = now()
+            WHERE id = 1 AND (locked_at IS NULL OR locked_at < now() - INTERVAL '2 minutes')
+            """
+        )
+        got_lock = lock_cur.rowcount > 0
+        conn.commit()
+        if not got_lock:
             conn.close()
-            return {"statusCode": 400, "headers": CORS, "body": json.dumps({"error": "VK токен не настроен. Добавьте токен в разделе Настройки"})}
+            return {"statusCode": 200, "headers": CORS, "body": json.dumps({"ok": True, "skipped": True, "reason": "fetch already running"})}
 
-        cur = conn.cursor()
+        try:
+            vk_token = get_vk_token(conn)
 
-        # Если передан конкретный group_id — обрабатываем только его
-        filter_group_id = post_params.get("group_id")
-        if filter_group_id:
-            cur.execute(f"SELECT id, vk_id, screen_name, name FROM {SCHEMA}.groups WHERE is_active=TRUE AND id=%s", (int(filter_group_id),))
-        else:
-            cur.execute(f"SELECT id, vk_id, screen_name, name FROM {SCHEMA}.groups WHERE is_active=TRUE")
-        active_groups = cur.fetchall()
+            if not vk_token:
+                return {"statusCode": 400, "headers": CORS, "body": json.dumps({"error": "VK токен не настроен. Добавьте токен в разделе Настройки"})}
 
-        if not active_groups:
+            cur = conn.cursor()
+
+            # Если передан конкретный group_id — обрабатываем только его
+            filter_group_id = post_params.get("group_id")
+            if filter_group_id:
+                cur.execute(f"SELECT id, vk_id, screen_name, name FROM {SCHEMA}.groups WHERE is_active=TRUE AND id=%s", (int(filter_group_id),))
+            else:
+                cur.execute(f"SELECT id, vk_id, screen_name, name FROM {SCHEMA}.groups WHERE is_active=TRUE")
+            active_groups = cur.fetchall()
+
+            if not active_groups:
+                return {"statusCode": 200, "headers": CORS, "body": json.dumps({"ok": True, "fetched": 0, "groups": 0, "alerts": 0})}
+
+            # Загружаем активные ключевые слова
+            cur.execute(f"SELECT id, word FROM {SCHEMA}.keywords WHERE active=TRUE")
+            keywords = [{"id": r[0], "word": r[1]} for r in cur.fetchall()]
+
+            # Загружаем настройки Telegram
+            cur.execute(f"SELECT key, value FROM {SCHEMA}.settings WHERE key LIKE 'tg_%'")
+            settings = {r[0]: r[1] for r in cur.fetchall()}
+            tg_enabled = settings.get("tg_enabled") == "true"
+            tg_chat_ids = [v for k, v in settings.items() if k.startswith("tg_chat_id") and v]
+
+            # Собираем посты и комментарии, уведомления отправляются сразу при нахождении
+            total_posts = 0
+            total_comments = 0
+            total_alerts = 0
+            for (group_id, vk_id, screen_name, group_name) in active_groups:
+                try:
+                    result = fetch_and_notify(
+                        conn, group_id, vk_id, group_name, vk_token,
+                        keywords, tg_enabled, tg_chat_ids
+                    )
+                    total_posts += result["new_posts"]
+                    total_comments += result["new_comments"]
+                    total_alerts += result["alerts"]
+                except Exception as e:
+                    print(f"ERROR group {group_id}: {e}")
+
+            return {"statusCode": 200, "headers": CORS, "body": json.dumps({
+                "ok": True,
+                "new_posts": total_posts,
+                "new_comments": total_comments,
+                "groups": len(active_groups),
+                "alerts": total_alerts,
+            })}
+        finally:
+            unlock_cur = conn.cursor()
+            unlock_cur.execute(f"UPDATE {SCHEMA}.fetch_lock SET locked_at = NULL WHERE id = 1")
+            conn.commit()
             conn.close()
-            return {"statusCode": 200, "headers": CORS, "body": json.dumps({"ok": True, "fetched": 0, "groups": 0, "alerts": 0})}
-
-        # Загружаем активные ключевые слова
-        cur.execute(f"SELECT id, word FROM {SCHEMA}.keywords WHERE active=TRUE")
-        keywords = [{"id": r[0], "word": r[1]} for r in cur.fetchall()]
-
-        # Загружаем настройки Telegram
-        cur.execute(f"SELECT key, value FROM {SCHEMA}.settings WHERE key LIKE 'tg_%'")
-        settings = {r[0]: r[1] for r in cur.fetchall()}
-        tg_enabled = settings.get("tg_enabled") == "true"
-        tg_chat_ids = [v for k, v in settings.items() if k.startswith("tg_chat_id") and v]
-
-        # Собираем посты и комментарии, уведомления отправляются сразу при нахождении
-        total_posts = 0
-        total_comments = 0
-        total_alerts = 0
-        for (group_id, vk_id, screen_name, group_name) in active_groups:
-            try:
-                result = fetch_and_notify(
-                    conn, group_id, vk_id, group_name, vk_token,
-                    keywords, tg_enabled, tg_chat_ids
-                )
-                total_posts += result["new_posts"]
-                total_comments += result["new_comments"]
-                total_alerts += result["alerts"]
-            except Exception as e:
-                print(f"ERROR group {group_id}: {e}")
-
-        conn.close()
-        return {"statusCode": 200, "headers": CORS, "body": json.dumps({
-            "ok": True,
-            "new_posts": total_posts,
-            "new_comments": total_comments,
-            "groups": len(active_groups),
-            "alerts": total_alerts,
-        })}
 
     # GET / — лента комментариев
     if method == "GET":
