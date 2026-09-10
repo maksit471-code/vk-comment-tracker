@@ -1,16 +1,28 @@
 """
-Планировщик: запускает сбор комментариев по каждой группе параллельно. v2
+Планировщик: запускает сбор комментариев по всем группам одним вызовом. v4
 Вызывается внешним cron-триггером (GET /).
+
+ВАЖНО: раньше сбор запускался параллельно (или быстро друг за другом)
+по каждой группе отдельным HTTP-вызовом — это приводило к тому, что
+несколько запросов к VK API уходили почти одновременно с одного токена,
+и VK отвечал ошибкой "Flood control" (лимит ~3 запроса/сек на токен),
+из-за чего сбор комментариев вообще переставал работать.
+
+Теперь планировщик запускает ОДИН fire-and-forget вызов vk-comments
+без group_id — внутри vk-comments все активные группы обрабатываются
+строго последовательно с паузой между запросами к VK, что не превышает
+лимит VK. Из-за этого сама функция vk-comments может выполняться дольше
+5 секунд (default timeout) — таймаут для неё нужно увеличить вручную
+в настройках функции (Ядро → Функции → vk-comments → Настройки).
 """
 
 import os
 import json
 import urllib.request
 import psycopg2
-from concurrent.futures import ThreadPoolExecutor
 
 SCHEMA = os.environ.get("MAIN_DB_SCHEMA", "t_p94871206_vk_comment_tracker")
-FETCH_URL = "https://functions.poehali.dev/1ba8f77d-759f-4bd4-bfc3-bd43b661451d"
+FETCH_URL = "https://functions.poehali.dev/17eaf892-d045-4ff2-b295-04bf9d4322e7"
 
 CORS = {
     "Access-Control-Allow-Origin": "*",
@@ -23,39 +35,37 @@ def get_conn():
     return psycopg2.connect(os.environ["DATABASE_URL"])
 
 
-def fire_group(group_id: int) -> None:
-    """Запускает fetch для одной группы — fire and forget (не ждёт ответа)."""
-    url = f"{FETCH_URL}?action=fetch&group_id={group_id}"
+def fire_fetch_all() -> None:
+    """Запускает fetch по всем активным группам одним вызовом — fire and forget."""
+    url = f"{FETCH_URL}?action=fetch"
     req = urllib.request.Request(url, data=b"{}", method="POST")
     req.add_header("Content-Type", "application/json")
     try:
-        # Минимальный таймаут — просто отправляем запрос, не ждём полного ответа
-        with urllib.request.urlopen(req, timeout=3) as r:
+        # Короткий таймаут — не ждём завершения долгого сбора, просто запускаем его
+        with urllib.request.urlopen(req, timeout=2) as r:
             r.read()
     except Exception:
         pass
 
 
 def handler(event: dict, context) -> dict:
-    """Запускает сбор комментариев параллельно по каждой активной группе (fire-and-forget)."""
+    """Запускает единый сбор комментариев по всем активным группам (fire-and-forget)."""
     if event.get("httpMethod") == "OPTIONS":
         return {"statusCode": 200, "headers": CORS, "body": ""}
 
     conn = get_conn()
     cur = conn.cursor()
-    cur.execute(f"SELECT id FROM {SCHEMA}.groups WHERE is_active = TRUE")
-    group_ids = [row[0] for row in cur.fetchall()]
+    cur.execute(f"SELECT COUNT(*) FROM {SCHEMA}.groups WHERE is_active = TRUE")
+    active_count = cur.fetchone()[0]
     conn.close()
 
-    if not group_ids:
+    if not active_count:
         return {"statusCode": 200, "headers": CORS, "body": json.dumps({"ok": True, "groups": 0})}
 
-    with ThreadPoolExecutor(max_workers=min(len(group_ids), 9)) as executor:
-        for gid in group_ids:
-            executor.submit(fire_group, gid)
+    fire_fetch_all()
 
     return {
         "statusCode": 200,
         "headers": CORS,
-        "body": json.dumps({"ok": True, "groups": len(group_ids), "fired": len(group_ids)}),
+        "body": json.dumps({"ok": True, "groups": active_count, "fired": True}),
     }
