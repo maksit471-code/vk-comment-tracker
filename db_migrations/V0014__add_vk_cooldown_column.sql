@@ -1,0 +1,1 @@
+ALTER TABLE t_p94871206_vk_comment_tracker.fetch_lock ADD COLUMN IF NOT EXISTS vk_cooldown_until TIMESTAMPTZ;

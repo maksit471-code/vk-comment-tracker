@@ -132,6 +132,10 @@ def fetch_and_notify(conn, group_id: int, vk_id: int, group_name: str, token: st
 
     # --- Получаем последние 3 поста ---
     wall = vk_request("wall.get", {"owner_id": f"-{vk_id}", "count": 3}, token)
+    if "error" in wall:
+        print(f"DEBUG VK ERROR group={group_id} vk_id={vk_id} error={wall['error']}")
+        if wall["error"].get("error_code") == 9:
+            return {"new_posts": 0, "new_comments": 0, "alerts": 0, "flood_control": True}
     posts = wall.get("response", {}).get("items", [])
 
     # --- Узнаём какие посты уже есть в БД ---
@@ -489,6 +493,19 @@ def handler(event: dict, context) -> dict:
             return {"statusCode": 200, "headers": CORS, "body": json.dumps({"ok": True, "skipped": True, "reason": "fetch already running"})}
 
         try:
+            # Если VK недавно ответил "Flood control" — не дёргаем VK вообще,
+            # ждём пока блокировка отойдёт сама (каждое новое обращение к VK
+            # во время блокировки продлевает её заново).
+            cd_cur = conn.cursor()
+            cd_cur.execute(f"SELECT vk_cooldown_until FROM {SCHEMA}.fetch_lock WHERE id=1")
+            cd_row = cd_cur.fetchone()
+            if cd_row and cd_row[0]:
+                import datetime as _dt
+                if cd_row[0] > _dt.datetime.now(_dt.timezone.utc):
+                    return {"statusCode": 200, "headers": CORS, "body": json.dumps({
+                        "ok": True, "skipped": True, "reason": "vk cooldown", "until": cd_row[0].isoformat()
+                    })}
+
             vk_token = get_vk_token(conn)
 
             if not vk_token:
@@ -521,6 +538,7 @@ def handler(event: dict, context) -> dict:
             total_posts = 0
             total_comments = 0
             total_alerts = 0
+            flood_hit = False
             for (group_id, vk_id, screen_name, group_name) in active_groups:
                 try:
                     result = fetch_and_notify(
@@ -530,13 +548,25 @@ def handler(event: dict, context) -> dict:
                     total_posts += result["new_posts"]
                     total_comments += result["new_comments"]
                     total_alerts += result["alerts"]
+                    if result.get("flood_control"):
+                        flood_hit = True
+                        break
                 except Exception as e:
-                    print(f"ERROR group {group_id}: {e}")
+                    import traceback
+                    print(f"ERROR group {group_id}: {e}\n{traceback.format_exc()}")
+
+            if flood_hit:
+                fc_cur = conn.cursor()
+                fc_cur.execute(
+                    f"UPDATE {SCHEMA}.fetch_lock SET vk_cooldown_until = now() + INTERVAL '60 minutes' WHERE id=1"
+                )
+                conn.commit()
 
             return {"statusCode": 200, "headers": CORS, "body": json.dumps({
                 "ok": True,
                 "new_posts": total_posts,
                 "new_comments": total_comments,
+                "flood_control": flood_hit,
                 "groups": len(active_groups),
                 "alerts": total_alerts,
             })}
