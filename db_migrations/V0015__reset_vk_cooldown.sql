@@ -1,0 +1,1 @@
+UPDATE t_p94871206_vk_comment_tracker.fetch_lock SET vk_cooldown_until = NULL WHERE id = 1;

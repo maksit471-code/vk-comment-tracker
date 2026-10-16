@@ -539,6 +539,8 @@ def handler(event: dict, context) -> dict:
             total_comments = 0
             total_alerts = 0
             flood_hit = False
+            flood_count = 0
+            ok_count = 0
             for (group_id, vk_id, screen_name, group_name) in active_groups:
                 try:
                     result = fetch_and_notify(
@@ -549,8 +551,12 @@ def handler(event: dict, context) -> dict:
                     total_comments += result["new_comments"]
                     total_alerts += result["alerts"]
                     if result.get("flood_control"):
-                        flood_hit = True
-                        break
+                        flood_count += 1
+                        if flood_count >= 3 and ok_count == 0:
+                            flood_hit = True
+                            break
+                    else:
+                        ok_count += 1
                 except Exception as e:
                     import traceback
                     print(f"ERROR group {group_id}: {e}\n{traceback.format_exc()}")
