@@ -41,7 +41,6 @@ def fire_fetch_all() -> None:
     req = urllib.request.Request(url, data=b"{}", method="POST")
     req.add_header("Content-Type", "application/json")
     try:
-        # Короткий таймаут — не ждём завершения долгого сбора, просто запускаем его
         with urllib.request.urlopen(req, timeout=2) as r:
             r.read()
     except Exception:
