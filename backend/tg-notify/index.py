@@ -18,6 +18,9 @@ GET /?action=messages_stats — статистика
 import os
 import json
 import datetime
+import re
+import html
+from concurrent.futures import ThreadPoolExecutor
 import urllib.request
 import urllib.parse
 import psycopg2
@@ -43,6 +46,33 @@ def tg(method: str, params: dict = {}) -> dict:
     req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=10) as r:
         return json.loads(r.read().decode())
+
+
+def scrape_channel(username: str) -> list:
+    """Читает открытую веб-страницу публичного канала t.me/s/<имя>."""
+    req = urllib.request.Request(
+        f"https://t.me/s/{username}",
+        headers={"User-Agent": "Mozilla/5.0 (compatible; Monitor/1.0)"},
+    )
+    with urllib.request.urlopen(req, timeout=4) as r:
+        page = r.read().decode("utf-8", "ignore")
+    posts = []
+    for block in page.split("tgme_widget_message_wrap")[1:]:
+        m_id = re.search(r'data-post="[^"/]+/(\d+)"', block)
+        if not m_id:
+            continue
+        m_text = re.search(r'tgme_widget_message_text[^>]*>(.*?)</div>', block, re.S)
+        m_date = re.search(r'<time[^>]*datetime="([^"]+)"', block)
+        text = ""
+        if m_text:
+            text = re.sub(r"<br\s*/?>", "\n", m_text.group(1))
+            text = html.unescape(re.sub(r"<[^>]+>", "", text)).strip()
+        posts.append({
+            "id": int(m_id.group(1)),
+            "text": text,
+            "date": m_date.group(1) if m_date else datetime.datetime.utcnow().isoformat(),
+        })
+    return posts
 
 
 def send_message(chat_id, text: str) -> dict:
@@ -285,67 +315,61 @@ def handler(event: dict, context) -> dict:
         row = cur.fetchone()
         notify_enabled = row and row[0] == "true"
 
-        # Получаем все обновления одним запросом
-        result = tg("getUpdates", {"limit": 100, "offset": -100})
-        updates = result.get("result", []) if result.get("ok") else []
+        group_info = {g[0]: (g[1], g[2]) for g in groups}
+        usernames = {}
+        cur.execute(f"SELECT id, username FROM {SCHEMA}.tg_groups WHERE is_active=TRUE")
+        for gid, uname in cur.fetchall():
+            usernames[gid] = uname
 
-        group_tg_ids = {g[1]: (g[0], g[2]) for g in groups}
+        def load(item):
+            gid, uname = item
+            if not uname:
+                return gid, None, "нет публичного имени"
+            try:
+                return gid, scrape_channel(uname), None
+            except Exception as ex:
+                return gid, None, str(ex)[:120]
+
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            results = list(pool.map(load, usernames.items()))
 
         total_saved = 0
         total_alerts = 0
+        report = []
 
-        for update in updates:
-            msg = update.get("message") or update.get("channel_post")
-            if not msg:
+        for gid, posts, err in results:
+            group_title = group_info[gid][1]
+            if err:
+                report.append({"group": group_title, "error": err})
                 continue
-            chat = msg.get("chat", {})
-            chat_tg_id = chat.get("id")
-            if chat_tg_id not in group_tg_ids:
-                continue
-
-            group_db_id, group_title = group_tg_ids[chat_tg_id]
-            tg_message_id = msg["message_id"]
-            text = msg.get("text") or msg.get("caption") or ""
-            if not text:
-                continue
-
-            date = msg.get("date", 0)
-            from_user = msg.get("from") or {}
-            sender_chat = msg.get("sender_chat") or {}
-            author_id = from_user.get("id") or sender_chat.get("id") or 0
-            author_name = (
-                f"{from_user.get('first_name', '')} {from_user.get('last_name', '')}".strip()
-                or sender_chat.get("title", "") or "Аноним"
-            )
-            author_username = from_user.get("username") or sender_chat.get("username") or ""
-            published_at = datetime.datetime.utcfromtimestamp(date).isoformat()
-
-            cur.execute(f"""
-                INSERT INTO {SCHEMA}.tg_messages
-                    (group_id, tg_message_id, author_id, author_name, author_username, text, published_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
-                ON CONFLICT (group_id, tg_message_id) DO NOTHING
-            """, (group_db_id, tg_message_id, author_id, author_name, author_username, text, published_at))
-            if cur.rowcount > 0:
-                total_saved += 1
-                matched = check_keywords(text, keywords)
-                if matched and notify_enabled and notify_chat_id:
-                    kw_list = ", ".join(f"<b>{k['word']}</b>" for k in matched)
-                    link = f"https://t.me/{author_username}" if author_username else ""
-                    author_link = f'<a href="{link}">{author_name}</a>' if link else author_name
-                    alert_text = (
-                        f"🔔 <b>Telegram: {group_title}</b>\n\n"
-                        f"👤 {author_link}\n"
-                        f"🔑 Ключевые слова: {kw_list}\n\n"
-                        f"{text[:500]}"
-                    )
-                    send_message(notify_chat_id, alert_text)
-                    total_alerts += 1
+            report.append({"group": group_title, "found": len(posts)})
+            for post in posts:
+                text = post["text"]
+                if not text:
+                    continue
+                cur.execute(f"""
+                    INSERT INTO {SCHEMA}.tg_messages
+                        (group_id, tg_message_id, author_id, author_name, author_username, text, published_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (group_id, tg_message_id) DO NOTHING
+                """, (gid, post["id"], 0, group_title, usernames[gid] or "", text, post["date"]))
+                if cur.rowcount > 0:
+                    total_saved += 1
+                    matched = check_keywords(text, keywords)
+                    if matched and notify_enabled and notify_chat_id:
+                        kw_list = ", ".join(f"<b>{k['word']}</b>" for k in matched)
+                        alert_text = (
+                            f"🔔 <b>Telegram: {group_title}</b>\n\n"
+                            f"🔑 Ключевые слова: {kw_list}\n\n"
+                            f"{text[:500]}"
+                        )
+                        send_message(notify_chat_id, alert_text)
+                        total_alerts += 1
 
         conn.commit()
         conn.close()
         return {"statusCode": 200, "headers": CORS, "body": json.dumps({
-            "ok": True, "saved": total_saved, "alerts": total_alerts,
-        })}
+            "ok": True, "saved": total_saved, "alerts": total_alerts, "report": report,
+        }, ensure_ascii=False)}
 
     return {"statusCode": 400, "headers": CORS, "body": json.dumps({"error": "Unknown action"})}

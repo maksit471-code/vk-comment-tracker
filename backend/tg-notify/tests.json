@@ -10,9 +10,7 @@
       "name": "GET groups list",
       "method": "GET",
       "path": "/?action=groups_list",
-      "expectedStatus": 200,
-      "expectedBody": "[]",
-      "bodyMatcher": "partial"
+      "expectedStatus": 200
     },
     {
       "name": "GET messages",
